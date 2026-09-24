@@ -1,0 +1,27 @@
+lets continue. I added rom files onto sd card, but bk does not start still - check please what is wrong
+
+****
+
+The FPGA's ROM-load path is cleared in simulation; what is left is the board, and I need four observations from it.
+
+What I checked
+
+- The card package and the firmware's parser agree: AZ.INI's "0:/rom/x" becomes "/sd/bk/rom/x", FatFs matches names case-insensitively, and make az-test loads every ROM to its address with 0 errors.
+- The shipped bin/bl616.bin and bin/tang.fs are byte-identical to the last builds.
+- The ROM path over the link was never simulated end to end before (the testbench preloaded its memory model). I added a byte-level read-back to the testbench (verify_image under +ROMSPI): all 183316 bytes land where the firmware sends them, 0 wrong, and a 1000 ms run with the ROMs sent over SPI ends in exactly the same state as the preloaded run (same bus-cycle counts, mapper, video registers, program counter).
+
+Two things the simulation cannot see, both worth checking first
+
+- The firmware's FatFs has exFAT disabled (FF_FS_EXFAT 0 in the SDK's ffconf.h). A card of 64 GB or more ships formatted exFAT and the firmware sees no file system at all; then no ROMs load, the machine runs zeros, and the OSD's file selectors show nothing. The card must be FAT32.
+- Everything has to sit under /bk/ on the card: /bk/AZ.INI, /bk/rom/..., /bk/disks/..., /bk/eeprom.dat (make card stages exactly this layout as build/card/bk). ROM files in the card's root are not found.
+
+One thing I noticed in the design, not the cause, but it explains a garbage screen before the logo: sysctrl.v resets system_reset to 0, so the machine runs on an empty SDRAM from about 200 ms after power-up until the firmware's first R=3.
+
+What I need from the board
+
+1. The six LEDs a few seconds after power-up. Healthy is LED5 and LED0 lit, LED4 out, LED2 and LED3 dark. LED3 lit is the SDRAM self-test failing; LED4 staying lit is the machine held in reset, which means the firmware never sent R=0.
+2. Does F12 bring up the OSD on the screen? If yes, the MCU link works; open Debug and read the lines "init", "cycle at", "reset", "177346", "units" and tell me them verbatim. If the units line says "-", the card did not mount.
+3. What is on the screen otherwise: black with no signal, black with a signal, the AZ logo, garbage, or a monitor prompt? A "no signal" is the 59.8 Hz mode being refused by the display before it is anything else.
+4. The card: its size and file system, and the folder layout you put on it. If you can, the BL616's console log at 2000000 baud on /dev/ttyACM0 after a reset; it prints "FPGA ready after ...ms", "AZ: ..." for every ROM, or "AZ: cannot open ..." or "SD wasn't ready".
+
+Files touched: sim/tb/tb_top.v (the verify_image check), .claude/docs/progress.md (the 20 Sep entry). Nothing committed.

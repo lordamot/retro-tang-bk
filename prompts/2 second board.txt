@@ -1,0 +1,716 @@
+lets continue.
+- tang-bk is not working still
+- current screen contents are in ./soft/current.jpg
+- sd is FAT32 for sure
+- F12 OSD works
+- Debug rows:
+init 1 por 1 bist 1 fail 0 late
+1
+cycle at FFCE, 27624
+cycles, 2 resets
+reset 0 init 0 key 0
+177346 0004 177340
+8000
+177716 0000 177230
+1440
+AZ: pending 0 done 1 err 0
+units: /sd/dave.img -
+
+tang leds lit: LED0, LED2, LED5
+
+****
+
+The board says the memory is up and the processor runs, but AZBOOT never executed. The next flash is built to say why.
+
+What the Debug rows and the picture mean
+
+- 177716's write side is 0000. Writing 014000 there is AZBOOT's second instruction (platform.md), so its first instructions never ran. 177346 at 0004, 177340 at 8000 and 177230 at 1440 are the reset values that agree.
+- The last cycle at FFCE (177716) is the VM1's HALT flow reading the start address. The processor restarts for ever on memory that holds no ROM where it looks. The I/O writes the strip reports are the HALT flow's 177676.
+- The 2 resets are the power-up and the firmware's R=3. AZBOOT's own controller reset would have made a third.
+- The SDRAM initialised and its self-test passed at phases 5-7 and 10-15, choosing 12 with the late capture (LED2 lit means that, not a fault). The self-test is four whole words at one row, so it cannot see a dropped byte mask.
+- The screen is the uninitialised memory drawn in the reset mode. The red and green squares are the strip: row 1 healthy except no SPI byte, no card read and no ROM byte in the last second.
+- The firmware on the board is older than bin/bl616.bin. The Debug page's first row shows "por", which menu.c stopped printing at 21:59 on 19 Sep.
+
+So the ROM is not in the memory, and the board cannot yet say why: the card's layout (the firmware wants /bk/AZ.INI and /bk/ROM/, and a unit at /sd/dave.img suggests the files sit at the root), the old firmware, or the memory under byte-masked writes.
+
+What I changed (build 0.1.1, both binaries in bin/)
+
+- The firmware reads the ROMs back over SYS command 8 after sending them, all of AZBOOT and one word in sixteen of the rest. The Debug page gets three new lines: whether AZ.INI was found and how many files went or were missing, how many words came back wrong or unanswered, and the first wrong word with what was wanted and what came.
+- The ROM load now happens with the machine held in reset, between the R=3 and the R=0. Before, the processor ran on the empty memory while the ROMs arrived.
+- A bug fixed: an image chosen in the OSD at /sd/dave.img was opened as /sd/bk/sd/dave.img, so unit 0 had no blocks. The host test now mounts an image at the card's root.
+- The SDRAM sweep keeps a mask for each capture and picks the longest run of either. One mask could not say which capture the two windows belonged to. The strip's third row is now the late mask and the Debug page shows both.
+
+Checks made here: lint clean; the 300 ms simulation with the ROMs sent over the link ends where the 19 Sep one did, 183316 bytes 0 wrong, AZBOOT's first 64 words back over command 8 0 wrong; az-test and menu-test 0 errors; the bitstream meets timing. The Fmax is 65.08 MHz at 64.8, a slack of 0.067 ns on the VM1's data path through the mapper into the controller and the blitter. That is thin and is noted in progress.md as a path to shorten. None of this has been on a board.
+
+What I need from you
+
+1. Flash both bin/tang.fs and bin/bl616.bin (BL616 in boot mode; replug, flash, power-cycle).
+2. Put soft/azbk/ on the card as /bk/ (make card stages it in build/card/bk/); dave.img goes into /bk/DISKS/ or stays where it is and is picked in the OSD.
+3. Send the Debug page's lines again, the ROM lines especially, and the card's listing. If a serial cable is on the BL616, its "AZ:" lines too.
+
+Nothing in this repository has ever been committed. Say if you want a commit of this state.
+
+flash companion
+
+****
+
+The BL616 is flashed with the 0.1.1 firmware (443568 bytes, SHA verified by the chip, "All programming completed successfully" over /dev/ttyACM0).
+
+One correction: bin/bl616.bin was still the 19 Sep firmware when I said both binaries were in bin/. make fw leaves its result in build/fw/ and I had not copied it on. It is copied now, and that is what went onto the board.
+
+The FPGA still runs the 19 Sep bitstream; bin/tang.fs is the new one. Power-cycle the BL616 out of boot mode, then say when to run make flash-fpga (replug, flash, power-cycle), or run it yourself.
+
+flash tang
+
+****
+
+The 0.1.1 bitstream is in the FPGA's SRAM (openFPGALoader: Load SRAM 100%, Done). It is gone at power-off; make flash-fpga-flash writes the SPI flash if you want it to stay.
+
+Do not power-cycle now, or the load is lost. The BL616 restarts itself when it sees the FPGA reconfigure; if it does not, tap its RESET only.
+
+Then: F12, Debug page - the lines after "units:" are the new ones: ROM: ini ok / NO AZ.INI and the file counts; verify N words, N bad, N unanswered; and the first bad word if any. And the strip's three rows in the picture's corner.
+
+flash tang onto flash, please
+
+****
+
+Written: the SPI flash erased and the 0.1.1 bitstream written to 100%, Done. Now power-cycle the board (the -f -r write does not reliably reconfigure the chip, build.md), and the BL616 comes up with it.
+
+Then F12, Debug: the ROM lines after "units:", and the strip's rows.
+
+it seems working now (maybe! at least passes some checks and fall into BK monitor). suggest please how to run game from mounted dave?
+
+****
+
+The same sequence the simulation walked with soft/dave.img (progress.md, "Dangerous Dave runs in simulation"):
+
+1. F12, AZ0, pick dave.img, then Save settings, then Cold reset (AZ). AZBOOT boots the [BOOT] unit, D0, which is whatever AZ0 holds; an image chosen in the OSD overrides AZ.INI's D0 (WRKANDOS2.IMG). If AZ0 is empty, AZBOOT has nothing to boot and drops you at the BK monitor - which is one reading of what you see.
+2. Wait. The BIOS screen retries its network four times (1.2 s), reads the clock and the CMOS, walks the memory, then reads the disk. In the simulation ANDOS 3.1's splash came at 22 s of machine time.
+3. On the splash ("ПРОБЕЛ") press Space.
+4. On the two-panel shell with the A> line, make sure the keyboard is in ЛАТ (Win key = ЛАТ, Left Ctrl = РУС), type DAVE and press Enter.
+5. The loader prints AZBK DETECTED, NVRAM READ OK, LOADING AND UNPACKING DATA with a progress bar (about 25 s in the simulation), then the GRF logo, the title and the credits; Space starts the game, KT is the menu.
+
+If it stays at the BK monitor after a cold reset with AZ0 mounted, the disk read is what failed: F12, Debug - the units line should name dave.img as the first unit, and the AZ line's err bit says whether the last controller command failed.
+
+-it falls into BK monitor still
+- debug lines units:
+AZ: pending 0 done 1 err 0
+units:
+/sd/bk/DISKS/dave.img
+0:/disks/A
+verify 3688 words, 0 bad, 0 unanswered
+verify 3688 words, 0 bad, 0 unanswered
+
+****
+
+The ROMs are in the memory and read back clean, unit 0 is the right file, and the controller shows no error. So the chain now fails at the disk, or before it, and the page does not yet say which.
+
+What I checked from here: the firmware's command service (azbk.c) against the controller's SPI protocol (azctrl.v) and against the testbench's stand-in, which the simulation booted ANDOS and Dave through: the status, buffer read, buffer write and done transactions match byte for byte, the unit select and block read answer the same way, the interrupt is level-triggered so no command can be missed. Nothing wrong found by reading - but that code has never run against the real FPGA, the simulation used the Verilog stand-in.
+
+So the next firmware makes the board say it. The Debug page gets three more lines after the verify: served N cmds, N rd N wr, N err; last 001 005 005 015 (the last four commands, newest first, an error marked with !) with the last block and unit; unit0 N blocks (or NOT FOUND). Built, az-test and menu-test clean, bin/bl616.bin. Put the BL616 in boot mode and say flash.
+
+And two things I need to know: does the AZBK BIOS screen appear (the 256-colour one: "AZBK Hardware Rev 1.00", the OK lines, the memory walk) before the monitor - or does it go straight from the start to the monitor's box? And the whole Debug page this time, the 177230 and 177346 lines especially: 177230 says whether the display was ever switched out of the reset mode, 177346 which pass AZBOOT reached.
+
+flash companion
+
+****
+
+Flashed: handshake, write and verification succeeded, all programming completed. Tap the BL616's RESET (or power-cycle: the bitstream is in the SPI flash now), let it boot, then F12, Debug, and send the whole page - and say whether the BIOS screen shows before the monitor.
+
+- AZ bios shown, yeah (and it was before)
+- still falls into BK monitor
+- all debug lines:
+init 1 bist 1 fail 0 late 1
+phase 12
+passes early 00E0 late
+FC00 rd F0
+cycle at 412E, 46419
+cycles, 2 resets
+reset 0 init 0 key 0
+177346 0184 177340
+C000
+177716 5802 177230
+1481
+AZ: pending 0 done 1 err 0
+units:
+/sd/bk/DISKS/dave.img
+0:/disks/A
+unit0 1600 blocks
+unit0 1600 blocks
+unit0 1600 blocks
+unit0 1600 blocks
+unit0 1600 blocks
+
+****
+
+My fault on the five identical lines: az_boot_line formatted every line into one static buffer and the page kept pointers, so the last line was shown five times and the served-commands lines - the ones that matter now - were lost. Fixed (a buffer a line), and the block read's service time in ms added to the served line. Built, both host tests clean, bin/bl616.bin. Boot mode and say flash.
+
+What the page does say: the two windows are the two captures (early 5-7, late 10-15, phase 12 late chosen, the last self-test read F0) - the memory is fine. 177230 = 1481 is the BK's own 4-colour mode: the monitor's screen, 256 pixels of 2 bits stretched four times, 256 lines three times. 177340 = C000 has windows 14 and 15 on, 177716 = 5802 is a page select. 177346 = 0184 differs from the simulation's 01C4 at the second pass's start in bit 6 only, and that may be the stage rather than a fault. The cycle count moves; nothing is held. So AZBOOT ran to its BIOS and handed over to the BK monitor, and what should have followed - the unit select (001), the boot block's read (005) and the transfer (015) - either never came or failed; the fixed lines say which: served N cmds, N rd, N err, and the last four with ! on an error.
+
+flash companion
+
+****
+
+Flashed, verified by the chip. Tap RESET on the BL616, let it boot to the monitor again, then F12, Debug, and send the lines after "units:" - served, last, unit0.
+
+units:
+/sd/bk/DISKS/dave.img
+0:/disks/A
+ROM: ini ok, 20 files 179K,
+0 missing
+verify 3688 words, 0 bad,
+0 unanswered
+served 28 cmds, 0 rd 0 wr,
+0 err, rd 0m
+last 001 001 001 001 blk 0
+u1
+unit0 1600 blocks
+
+****
+
+Found. The controller served 28 commands and never a block read; the last four are all selects, and the last unit is 1. AZ337's boot code (160314 in the ROM) writes the unit into the DR, 001 into the CSR, tests ERR in the very next instruction and goes straight on to the block number, 002 and 005 - it never waits for DONE after a select. GID's emulator completes the select inside the write; MAXIOL's controller evidently as fast. Ours sent it to the MCU: a task wake-up and a file open later the 002 and 005 had already arrived while DONE was clear and were dropped, the software read an empty buffer, retried the select, moved to unit 1, gave up - the monitor. The simulation's stand-in answered within the software's dozen instructions, by a few microseconds, and hid it.
+
+The fix: the select is the FPGA's now (azctrl.v), answered from a table of unit sizes the firmware keeps in the controller's buffer after AZ.INI and every mount; the status byte names the selected unit and the firmware's read opens the file from it. The testbench's stand-in works the same way, so the SPI byte is proven there too. Lint clean, fw built, az-test and menu-test clean; the bitstream and a 9.8 s simulation through ANDOS's first reads are running.
+
+flash companion
+
+****
+
+Flashed and verified. The FPGA next: "flash tang" writes the 0.1.2 bitstream to the SPI flash (this build changes the controller, so the firmware alone is not enough), then power-cycle.
+
+flash tang onto flash
+
+****
+
+Written to 100%, Done. Power-cycle the board; the BL616 comes up with it. With dave.img in AZ0 the boot should now go BIOS, monitor's box, ANDOS 3.1's splash (Space), the shell (DAVE, Enter). If it stops at the monitor again: F12, Debug, the served and last lines - they should now show 005s and a 015-free count of reads.
+
+it now hangs with white square at top left of the screen - guess read failed somehow; OSD is not working at that step also - I waited for about 5 minutes
+
+****
+
+The OSD dying with it says the MCU is stuck, not the machine: the OSD task shares the SPI with the task that serves the controller. The select used to open the file from that task without hanging (28 served, 0 errors), so the read path is the difference, and it is a small one - a seek and a read. What that task has is a 2 KB stack, and FatFs is built with its 512-byte long-name buffer on the stack, plus the card layer's printf per sector; no sibling ever ran FatFs from that task. FreeRTOS's overflow check is on and its hook stops everything: the picture of a dead OSD with the machine still waiting for DONE, the white square being the boot's cursor.
+
+Done for the next firmware: the serving task's stack is 8 KB; the card layer's two unbounded waits (a card that does not answer spun there for ever with the SPI mutex held) are bounded and return an error, so a failed read comes back as ERR to the machine instead of a hang; the Debug page shows "sdc timeouts N, read phase P" (1 opening, 2 seeking, 3 reading, 4 sending, 0 done) - if it hangs again, that says where. Built, both host tests clean, bin/bl616.bin. The FPGA is unchanged. Boot mode and say flash.
+
+flash companion
+
+****
+
+Flashed and verified. Tap RESET on the BL616 (the FPGA keeps its 0.1.2 bitstream), boot with dave.img in AZ0, and say what the screen does; if it hangs, whether F12 still opens the OSD, and the Debug page's served/last/sdc lines.
+
+(the 9.8 s simulation finished)
+
+****
+
+The simulation with the FPGA's own select boots exactly as the 19 Sep run: the BIOS, block 0 of unit 0 at 9.159 s, blocks 12-61 by 9.8 s; 55 commands, 51 block reads, 0 errors, no select reached the stand-in, config checks 0 wrong, read-after-write 335766 words clean. So the controller change is proven in simulation; the board's hang is the firmware side, and the flashed firmware carries the stack and the bounded waits.
+
+mostly works!
+- remove those debug squares from screen please
+- check provided ./soft/current01.jpg current02.jpg current03.jpg - jpg are static but it flashes with artifacts quickly my bet around 50Hz it looks like other parts of level somehow visible - azbk video memory mapping problem maybe?
+
+****
+
+Dave's first level on the board. The squares are gone from the picture (their bits are the Debug page's "act" byte).
+
+The flashing: not the memory mapping - the bands are half-drawn states of the frame, other parts of the level and streaked sprites, mostly near the top. The blitter's automatic run starts at line 769 and here moves one word a memory cycle (a 60x60 sprite about 2 ms, a playfield redraw several), so it is still drawing when the next frame's fetch begins; and the 60 Hz interrupt fired at line 769 regardless, so the game's handler ran on an unfinished frame. GID's emulator executes the packet whole at the frame's end and interrupts after; the game was written against that. So 0.1.3 raises the 60 Hz once the blitter's run has ended. If the game flips pages or queues the next packet in its handler, that cures it; if it draws into the displayed page, the drawing still shows for as long as the run outlasts the 37 lines of blanking, and the blitter's speed (32-bit words, bursts, about 4x) is the next step. Lint clean, host tests clean; the bitstream and a 4 s boot run are building; a 4-hour run into the level is going in the second sim directory to show the artefact and measure the runs.
+
+flash companion
+
+****
+
+Flashed and verified. Say "flash tang onto flash" for the FPGA (the interrupt change is there), then power-cycle. The 4 s boot check is still running; I report it when it ends.
+
+flash tang onto flash
+
+****
+
+Written to 100%, Done. Power-cycle, boot into Dave, and say whether the flashing is gone or only less. The boot check is still running.
+
+(the 4 s boot check finished)
+
+****
+
+The boot check of the 0.1.3 bitstream is clean: the same controller commands as before, config checks 0 wrong, the display in the 256-colour mode at 4 s with two frame interrupts taken, the HDMI frame 1024x768. The squares are out of the frame.
+
+the same or worse actually - check newer ./soft/current04.jpg current05.jpg current06.jpg
+stair visibility changes - it seems when mobile phone takes photo, simply - as its flashes heavily still
+
+****
+
+Photo 04 settles it: the title picture is static, no blitter runs, and it still has the band of stripes at the left edge and the jagged "staircase" sky that the simulation's frame of the same picture (sim/frames/dave-title.png) does not have. That is the line fetch, and the code shows how. At every line start azvideo.v resets its burst and word counters and switches line buffers; a burst taken just before delivers its remaining words after the switch, and those were written at the new line's first positions and stepped the word counter - the whole line one burst (16 source pixels, 64 on screen) to the right with the previous line's last burst at its left. It happens when the fetch runs close to the line's end, which the processor's cycles and the board's late capture bring about; the simulation's ideal memory never ran that late. The level's flicker is the same thing on lines where it happens and lines where it doesn't.
+
+0.1.4: those words are dropped, and the Debug page gets a "video" line counting the lines whose fetch did not finish and the lines a burst straddled, so the board says how often it happens and whether the fetch is also too slow outright. The 60 Hz-after-blitter wait stays (GID's order). Lint clean, fw built, host tests clean; the bitstream and a 1 s boot run are building. Both halves change; boot mode and say flash.
+
+(the 1 s boot check finished)
+
+****
+
+Clean: the ROMs over the link and AZBOOT's first 64 words back through command 8 with 0 wrong, config checks 0 wrong, the display in the 256-colour mode at 1 s as before. 0.1.4 is ready in bin/ for both halves.
+
+flash companion
+
+****
+
+Flashed and verified. Now "flash tang onto flash".
+
+flash tang onto flash
+
+****
+
+Written to 100%, Done. Power-cycle; then the game, and the Debug page's "video" line while it runs.
+
+flash tang onto flash
+
+****
+
+Not written: openFPGALoader could not open the FTDI device ("JTAG init failed with: unable to open ftdi device") - the state build.md describes after an earlier flash, cleared only by replugging the Tang's USB cable. Replug it and say "flash tang onto flash" again.
+
+flash tang onto flash
+
+****
+
+Written to 100%, Done. Power-cycle, run the game, and send the Debug page's "video" line (short lines, straddled) from inside it, with whether the left band and the flashing are gone.
+
+better (less side effects in title screen, for example) but flashes a lot still (see ./soft/current07.jpg current08.jpg); dbg says 
+video: 53341 short lines,
+4825 straddle
+
+****
+
+The counters say it: the fetch does not finish most lines (53341 is the 16-bit counter wrapping), so a line's tail is the line before's, and the straddles were only the visible edge of that. Three layers of whole 512-pixel rows are 96 bursts of eleven clocks with the processor's cycles ahead of them: more than a line has.
+
+0.1.5: the fetch reads only the visible window of a row - from the layer's scroll, as many bursts as 1024 >> xs source pixels need plus one, wrapping at the row's end. At the game's x4 that is 17 bursts a layer instead of 32; the buffer is indexed by the row's absolute word so the pixel side is untouched. Lint clean; the 4 s run to the BIOS and the bitstream are building. The firmware is unchanged; only the FPGA needs flashing this time. If the counters still climb after it, the next levers are the arbiter and the processor's bus rate.
+
+flash tang onto flash
+
+****
+
+Written to 100%, Done. Power-cycle, the game, and the "video" line again: the short-line count is the measure now.
+
+flashes still - ./soft/current09.jpg
+dbg: 
+video: 106 short lines, 0 straddled
+
+****
+
+The fetch is fixed: 106 short lines in a whole session is nothing, 0 straddled, and the picture is clean - no band, no shifted lines. What is left is a tear: a horizontal boundary a third of the way down, above which the wall and the ladder show at half strength, so alternate frames differ there. The game flips its page in the 60 Hz handler; since 0.1.3 that interrupt follows the blitter's run, the run is some 250 lines long (a scrolling playfield's redraw at a word a cycle), so the flip lands there, and the pages are live. In GID the run is instant and the flip lands inside the blanking.
+
+0.1.6: under the AZ's 60 Hz mode the pages and horizontal scrolls are latched at the frame's end whatever bit 11 says - a flip is a whole frame later and whole, which is what GID shows. Lint clean; the bitstream and the 4 s run are building. FPGA only again. If the game also draws into the displayed page, that drawing still shows for as long as the run outlasts the blanking; the blitter's speed is the next thing, and the level run in the second sim directory will say how long the runs are.
+
+(the 4 s run with the windowed fetch finished)
+
+****
+
+Clean: the ROMs over the link and back with 0 wrong, config checks 0 wrong, the BIOS screen at 3.85 s identical to the earlier frame, every line OK. The 0.1.6 bitstream (the windowed fetch and the page latch) meets timing at 65.28 MHz and is in bin/tang.fs.
+
+flash tang onto flash
+
+****
+
+Written to 100%, Done. Power-cycle and run the game: the tear a third of the way down is what 0.1.6 addresses.
+
+flashes still but looks like whole frame now
+check current10.jpg current11.jpg - player at different places but flashing wrong frame is the same - might help!
+
+****
+
+It does help. Whole frames, and the wrong one the same wherever the player is: the playfield alternates with a fixed page that does not scroll with the level - the wallpaper, the window with a face, the ladder. One candidate is a write to 177662 with the BK's screen bit, which here puts page 4 or 034 into layer 0 unconditionally; a game writing 177662 every frame (the palette, the timer bit) and its own page register too would leave whichever came last at line 768 on the screen, alternately. Another is a page register the game writes twice a frame. I checked the interrupt too: the VM1 takes IRQ2 once a pulse, so the 2 ms hold cannot run a handler twice; dropped.
+
+To settle it, 0.1.7's Debug page has a "regs" line: writes since power-up to 177232, 177240/242, 177662, 177664, the scrolls and 177230, a wrapping byte each. Read it twice about a second apart in the game; the differences are the rates, and a register written every frame shows about 60 a second. Both halves changed (the FPGA carries the counters, the firmware prints them).
+
+flash companion
+
+****
+
+Flashed and verified. Now "flash tang onto flash".
+
+flash tang onto flash
+
+****
+
+Written to 100%, Done. Power-cycle, the game, then F12 > Debug for the "regs" line, close, wait a second, F12 > Debug again, and send both.
+
+flashes full frame, quickier as before
+debug 1:
+regs: pg0 223 pg12 177
+662 9 664 13 scr
+debug 2:
+regs: pg0 223 pg12 177
+662 9 664 13 scr
+
+****
+
+Identical readings: not one page or mode write in a second of play (the scroll and 177230 counts fell off the 40-column line; a fix for that). So nothing flips. The game keeps one set of pages and redraws into them, and what alternates is the memory's own state: the blit packet clears the upper layers to the transparent colour and draws the sky and the objects back, and while it runs the display shows the wallpaper layer beneath - the fixed wrong picture.
+
+I fetched MAXIOL's developer notes (thread 5556, the blitter section). Their own words: in the frame's blanking a couple of commands with a 3.6-4 KB sprite fit for certain; for more sprites buffering is recommended - display one screen, draw the other, switch. The blitter has the lowest memory priority, the automatic run starts at the end of the visible frame, and the recommended technique is to clear a layer and redraw the sprites in order. Ours is the same order (a 60x60 sprite in 0.44 ms). So the real hardware faces exactly this and its answer is double-buffering; Dave doesn't, and GID, which executes the packet whole between two frames, never showed it.
+
+What can be done: a faster blitter (32-bit words, bursts; several times) shrinks the band the run leaves at the top of the frame but cannot fit a packet of many kilobytes into 37 lines; hiding it entirely as GID does needs a frame snapshot - the displayed window of the three layers copied into a shadow after each run - about a third of the memory's time per frame and a new port. The level run in the second sim directory (about three hours to go) measures the packet and decides. Nothing to flash for now.
+
+while waiting - my problem here is that this game (dave) actually runs on real hardware (which I do not have, unfortunately) without any flashing; so we should be able to beat it I assume - right?
+
+****
+
+Right, and that changes the reading. I pulled the benchmark screenshots from MAXIOL's thread (firmware 18, May 2025, a 60x60 sprite): 2028 fills and 1536 copies a second, 1953 and 1466 with the layers on. Ours does a fill in 0.17 ms and a copy in 0.44 ms - faster than the real hardware. So a packet the real hardware executes without visible flicker leaves less of a trace here, not more. Either the game's packet is small there and something of ours turns it into a layer-wide clear, or the flicker is not the blitter's at all. The thread's command format (width minus one, rows, the row increment, the operation bits) matches GID's, which our blitter follows, so decoding is not the obvious culprit.
+
+0.1.8 measures the runs on the board: the Debug page's "blit" line - runs, the last and the longest run in lines (the blanking is 37), the last packet's command count - and the "regs" line split so the scroll and 177230 counts show. A dozen commands and a few lines acquit the blitter and point at the display; hundreds and runs past 37 lines convict the packet. Both halves change: fw built and tested, the bitstream in its gate.
+
+flash companion
+
+****
+
+Flashed and verified. Now "flash tang onto flash".
+
+flash tang onto flash
+
+****
+
+Written to 100%, Done. Power-cycle, the game, F12 > Debug: the "blit" line and both "regs" lines.
+
+blit: 78 runs, last 17 max
+1412 lines
+
+regs: pg0 232 pg12 195
+662 9 664 13
+regs: scroll 188 230 11
+
+****
+
+That acquits the blitter: the last run was 17 lines, inside the 37 of blanking; the longest, 1412 lines, will be the level's initial draw. Small packets, constant registers, the fetch finishing its lines - and alternate frames differing by a whole layer's worth. Either the fetch reads different addresses on alternate frames (the display's row logic, ours) or it reads the same addresses and the memory's content differs (the game's or the blitter's doing). The board can tell those apart: 0.1.9 latches the fetch's addresses at line 300 of two consecutive frames - the three pages, the three rows, the three scrolls, the mode - into a second debug window (SYS command 12) and the Debug page shows them as "frA:" and "frB:". Same on both lines: the memory differs. Different: the display. Both halves change; the firmware is built and tested; the bitstream is in its gate. And when it is flashed, please read the page twice a second apart: the blit runs and the pg counts between the two readings are rates.
+
+flash companion
+
+****
+
+Flashed and verified. Now "flash tang onto flash".
+
+flash tang onto flash
+
+****
+
+Written to 100%, Done. Power-cycle, the game, the Debug page twice a second apart: the frA/frB lines, the blit and regs lines from both.
+
+first try:
+blit: 204 runs, last 17 max 1412 lines
+regs: pg0 39 pg12 65 662 9 664 13
+regs: scroll 184 230 11
+frA: pg 400 500 2600 row 7 171 75 hs 0
+frB: pg 400 500 2600 row 75 171 75 hs 0
+
+second try:
+blit: 138 runs, last 17 max 1412 lines
+regs: pg0 6 pg12 255 662 9 664 13
+regs: scroll 52 230 11
+frA: pg 6500 6600 2600 row 75 171 75 hs
+frB: pg 6500 6600 2600 row 75 171 75 hs
+
+****
+
+Three seconds apart, and they say it all. 190 blitter runs in between - one a frame; pg0 written 223 times and pg12 190 times - every frame; and the pages went from 400/500/2600 to 6500/6600/2600. The game double-buffers: two sets of pages for layers 0 and 1, switched live, the hidden set drawn by the processor (hence the small blit packets), and a set shown for a few frames while the other is drawn (the two consecutive frames' snapshots show the same set both times).
+
+That convicts my page latch of 0.1.6. A game that switches live and immediately starts clearing the other set must have its switch applied at once; latched to the next frame's end, our display kept showing the buffer the game had just begun to clear, for up to a whole frame after every switch. That is the fixed wrong picture: a just-cleared buffer. GID renders per line and switches at once, and so does the hardware. The interrupt-after-blit of 0.1.3 was the same kind of wrong turn: the hardware raises the frame interrupt at the frame's end, inside the blanking, and the game's switch lands there.
+
+0.1.10 puts both back to what the hardware does: the 60 Hz at line 769, the pages live unless bit 11 - now that the fetch faults that confused the earlier readings are gone. Lint clean; the bitstream is in its gate; the firmware is unchanged, so FPGA only.
+
+flash tang onto flash
+
+****
+
+Written to 100%, Done. Power-cycle and the game: is it steady now?
+
+check ./soft/current1.mp4 - might help;
+blit: 32 runs, last 17 max 1416 lines
+frA: pg 6500 6600 2300 row 75 171 267 h
+frB: pg 400 500 2300 row 75 171 267 hs
+
+177230 869F
+
+****
+
+The video and 869F together: a horizontal band of the other page set moving slowly through the picture, and 177230 = mode 7, three 8-bit layers, 512-pixel rows, x4, bit 11 clear - the pages live, as on the hardware. A band that drifts is a page switch at a raster line that drifts. The game's handler runs on the "50 Hz" timer, and here that was a free-running counter at exactly 50 Hz, unrelated to the raster, so the switch landed at a line moving with the beat between 50 and 59.8 Hz. The real AZBK's is what its BIOS calls the "v-sync timer 48Hz": derived from the 60 Hz frame, four interrupts in every five frames, each in the blanking - where a page switch is never seen.
+
+0.1.11: the 50 Hz (the BK's and the AZ's timer alike) is line 769 on four of every five frames. Lint clean; the bitstream and a 1 s boot run are building; the firmware unchanged. Send the 177346 line from the game when you can: bits 3 and 2 both set means the game uses that timer.
+
+Sources: MAXIOL's blitter notes (forum thread 5556), grf's blog (bk.grfgames.com: the release post says the GID sound glitch "is not there on the hardware", so the game is run on real hardware).
+
+(the 1 s boot check of 0.1.11 finished)
+
+****
+
+Clean, identical to the earlier runs to the bus-cycle count: the ROMs over the link and back with 0 wrong, config checks 0 wrong, AZBOOT in the 256-colour mode at 1 s. The 0.1.11 bitstream meets timing (64.93 MHz, thin) and is in bin/tang.fs; the firmware is unchanged. "flash tang onto flash" when ready.
+
+flash tang onto flash
+
+****
+
+Written to 100%, Done. Power-cycle and the game: is the band gone? And the 177346 line from inside it.
+
+177346 0188
+I tried to record slowed video to help you understand: ./soft/current2.mp4
+
+****
+
+0188: bit 3 set, bit 2 clear - the game runs on the AZ's 60 Hz frame interrupt, not the 50 Hz timer, so the timer change was not its cure (it stays; it is what the hardware does). The slowed video is the key: two complete pictures alternating, no band - one with a brick-wall texture where the sky should be, the other with the cyan sky, the tree and the ground the same in both. Two complete page sets whose sky layer differs: one set never got the sky drawn into it.
+
+A game that double-buffers draws the level into both sets once, at the level's start (the 1416-line run), most cheaply with one big copy per layer. A layer here is 256 rows (177230's roll of 8), and 256 in a byte is 0 - which our blitter took as "no rows" and skipped. So the second set's sky layer kept whatever the memory held: the brick texture. On the hardware a down-counter loaded with 0 runs the full 256.
+
+0.1.12: a row count of 0 is 256 rows. Lint clean; the bitstream is in its gate; the firmware unchanged. FPGA only.
+
+flash tang onto flash
+
+****
+
+Written to 100%, Done. Power-cycle and the game.
+
+177436 0188;
+check another ./soft/current3 video
+lets analyze possible reasons more careful this time?
+
+****
+
+Agreed. The new video shows every frame as a blend of the two pictures, so the alternation survived the row-count fix; that theory is out or incomplete, and I stop guessing. What the board has told us for certain: the game runs on the 60 Hz frame interrupt (0188), writes its page registers every frame, alternates two page sets (400/500 and 6500/6600, layer 2 fixed), runs one small blit packet a frame (17 lines), and one picture is the other with the sky layer missing. What we do not know is what the game writes and when: at which raster line it switches sets and to which, and what its per-frame packet draws into which set. Both are readable from the board. 0.1.13 puts on the Debug page the last eight page/scroll writes with the raster line of each (w0..w7, newest first) and the last blit packet's first four commands in octal (c0..c3: SRC/DST high bytes, SRC low, DST low, the command word, width/rows, the row increment, Y, the constants). Both halves change; the firmware is built and tested; the bitstream is in its gate. Then, from inside the game, the whole page please - the w and c lines especially.
+
+flash companion
+
+****
+
+Flashed and verified. Now "flash tang onto flash".
+
+flash tang onto flash
+
+****
+
+Written to 100%, Done. Power-cycle, the game, the whole Debug page.
+
+flash tang onto flash
+
+****
+
+Not written: "JTAG init failed with: unable to open ftdi device" again. Replug the Tang's USB cable and say "flash tang onto flash" once more.
+
+flash tang onto flash
+
+****
+
+Written to 100%, Done. Power-cycle, the game, the whole Debug page from inside it.
+
+flashes still; debug page:
+w0: pg2=2600 at line 340
+w1: vs2=0 at line 240
+w2: hs2=0 at line 240
+w3: vs1=140 at line 240
+w4: hs1=0 at line 240
+w5: pg0=6500 at line 240
+w6: pg1=6600 at line 240
+w7: pg2=2600 at line 240
+c0: 13152 0 20 0 20013 365 160 0
+c1: 13152 0 20 11 20013 365 160 0
+c2: 11066 10400 20 11 10007 371 440 0
+c3: 11066 6000 30 11 10007 371 440 0
+
+****
+
+Facts at last. The eight writes are one burst at raster line 240, oldest first: pg2=2600, pg1=6600, pg0=6500, hs1=0, vs1=96, hs2=0, vs2=0, and pg2 again at line 340 - the game switches sets from its main loop, mid-frame, live. The packet: c0 fills a 12x32-word block at page 6500 row 112 column 16 with 0 (clears Dave's old place, layer 0); c1 copies the same block from page 1300 there (draws Dave); c2 and c3 copy two 8x16-word sprites from page 1100 into page 6600 at row 288, columns 16 and 24. All into 6500/6600, the set just switched to. So the game shows a set and draws that frame's sprites into it in the blanking, alternating sets; both sets must hold the whole level, drawn once at the level's start - and one of ours lacks the sky. The command our blitter gets wrong is in that initial packet, not this one, and the row count of 0 was not it.
+
+That packet is overwritten sixty times a second, but it is the largest the game ever loads: 0.1.14 keeps a shadow of the largest packet in the blitter and the Debug page shows its command count ("biggest packet") and its first eight commands (b0..b7). Both halves change; built, tested, in bin/; the bitstream in its gate. Then the page from inside the game once more - the b lines and the count.
+
+flash companion
+
+****
+
+Flashed and verified. Now "flash tang onto flash" (replug first if the JTAG refuses).
+
+flash tang onto flash
+
+****
+
+Written to 100%, Done. Power-cycle, the game, the Debug page: "biggest packet" and the b lines.
+
+flashes still; debug page:
+biggest packet 54 cmds
+b0: 11066 0 0 11 10007 371 400 0
+b1: 11066 0 10 11 10007 371 400 0
+b2: 11066 0 20 11 10007 371 400 0
+b3: 11066 0 30 11 10007 371 400 0
+b4: 11066 0 40 11 10007 371 400 0
+b5: 11066 0 50 11 10007 371 400 0
+b6: 11066 0 60 11 10007 371 400 0
+b7: 11066 0 70 11 10007
+
+****
+
+That packet is a strip of tiles into page 6600 at row 256 - the largest by count, not the level draw - and it made me look at the pages themselves, which is where the answer was all along. 6500 and 6600 are 13.3 and 13.5 MB into the AZ's 32 MB. This board's SDRAM is 8 MB, and the design wrapped the top bits (fpga.md: "2048 pages of the 32 MB's 8192"). 6600 less 0o4000 is 2600: the backdrop page of layer 2, exactly. Set B's sky layer and the backdrop were one and the same memory; the game's sprites and tiles written into 6600 landed in the backdrop and the backdrop showed where set B's sky should be. That is the fixed wrong picture, the earlier "other parts of the level", and why nine builds of display fixes could not cure it. The simulation's level run (the old design, a zeroed memory) shows the loading screen's lower half as overlapping textures the same way.
+
+0.1.15: a page table in the SDRAM controller - the space's 8192 pages of 4 KB onto the chip's 2048: pages 0-127 (the BK's memory, the ROMs, the logo) one to one, any other page given the next free physical page at its first write, a read of a page never written answering zeros, the table cleared at power-up and by the AZ's cold reset; every memory port widened to the 32 MB. A translation costs two clocks a cycle. The Debug page's blit line shows the pages given out. Lint clean; the 1 s boot run and the bitstream are building; the firmware is built and tested. Both halves.
+
+(the first build of the page table, checked)
+
+****
+
+The bitstream passed (Fmax 65.34 MHz, BSRAM 35/46), the 1 s boot run did not: ROM bytes lost from the twentieth on. The table's clearing sweep at a cold reset blocked the arbiter for 8192 clocks while the firmware's bytes arrive over the link every 26 clocks into a 16-deep queue, which overflowed. Pages 0-127 never touch the table, so the sweep now holds up only translated pages. Lint clean; the run and the bitstream again.
+
+(the corrected page-table build, checked)
+
+****
+
+Clean: the ROMs over the link and back 0 wrong, config checks 0 wrong, read-after-write over the 32 MB 338399 words 0 wrong, AZBOOT in the 256-colour mode at 1 s. The bitstream meets timing (64.86 MHz, the thinnest yet; BSRAM 35/46). 0.1.15 is in bin/ for both halves; a 9.8 s ANDOS run is going to exercise the allocator beyond the fixed pages. Boot mode and say flash.
+
+estimate how much of real time left for both shells running now
+
+****
+
+The level run (old design): 108 of 112 s, about 8-10 minutes, ~21:10. The ANDOS run (page table): 2 minutes in, the same run took 19 minutes earlier, ~21:20.
+
+flash companion
+
+****
+
+Flashed and verified. Now "flash tang onto flash".
+
+flash tang onto flash
+
+****
+
+Written to 100%, Done. Power-cycle and the game: the page table is the cure if the diagnosis is right.
+
+flash tang onto flash
+
+****
+
+Not written: "JTAG init failed with: unable to open ftdi device". Replug the Tang's USB cable and say it again.
+
+flash tang onto flash
+
+****
+
+Written to 100%, Done. Power-cycle and the game.
+
+picture is clean now, but game picture hanged at a frame shown in ./soft/current12.jpg - related to page switch it seems
+dbg:
+blit: 166 runs, max 1965 lines, 2 cmds, cycle at FFCE, biggest packet 64 cmds
+
+****
+
+The clean picture confirms the diagnosis: the aliasing was the flicker, and the frozen frame (current12.jpg) has no artifact at all. The stop is the processor's: "cycle at FFCE" is 177716, the HALT-and-restart loop of the first day, now mid-level. The likeliest way the page table can do that is by running out: 1920 pages is 7.5 MB, and when the count wraps it hands out pages already in use, two virtual pages share one physical page, and the game's code or data is overwritten until it executes a zero. The blit line would have said how many pages were taken, but it ran past 40 columns and the count fell off.
+
+0.1.16: the allocator counts its wraps, and the Debug page shows "pages N wraps M" on the regs line. The testbench prints the same at the end of a run, and a 4 s BIOS run is going to see how many pages the BIOS itself takes. Firmware built and tested; the bitstream in its gate. Both halves. Then the count from inside the game, at the stop.
+
+flash companion
+
+****
+
+Flashed and verified. Now "flash tang onto flash" (replug first).
+
+flash tang onto flash
+
+****
+
+Written to 100%, Done. Power-cycle, play to the stop, the regs line (pages, wraps) and the cycle line.
+
+game was stalled at the start with OSD hanged also; then I was able to move dave;
+fully hanged image a bit earlier than previous time
+dbg from that:
+regs: pg0 64 pg12 115 662 9 664 13
+regs: scroll 32 230 11;
+pages: 1065 wrap
+
+and at the above of debug:
+blit: 0 runs, max 1909 lines, 1 cmds
+cycle at 0216, biggest packet 64 cmds
+
+****
+
+1065 pages of 1920, no wrap: the table did not run out, and the 4 s BIOS simulation with it is clean (config and 1.76 million words of read-after-write 0 wrong, the BIOS takes 16 pages). The new symptoms point at the card path: an OSD frozen for seconds is the serving task holding the SPI bus that long, which its bounded card waits do when a sector does not come (one to two seconds each), and the processor at 0216, a low RAM address, is a wait loop on the controller, not the HALT loop. A level loaded through failing reads explains both the stall and the later stop. The Debug page's lines below "units" say it: served N cmds with the error count and the read time, the last four commands with their "!" marks, and "sdc timeouts N, read phase P". Those, please, from the stop.
+
+(the 9.8 s ANDOS run with the page table finished)
+
+****
+
+Clean and the same boot: block 0 of unit 0 at 9.199 s (9.159 s before - the translation's cost), 41 block reads by 9.8 s, 45 commands, 0 errors, config checks 0 wrong, read-after-write 335646 words 0 wrong.
+
+units show nothing and all that related to sd card is not shown anymore. I guess because we are displaying too much there those w0..w7 b0..b7 etc
+
+if it safe to connect both tang and companion to the laptop at the same time - I prefer to automate this reflash and debug info grab, but:
+- no "replug to reinit ftdi for companion"
+- no "boot mode companion"
+- do you mean we are using tang board sdram as sdram literally? so we can not use "flash onto sdram" anymore yet?
+
+****
+
+Right on the page: 48 lines, and a long line wraps into two, so the w/c/b lines pushed the card lines off. The firmware now puts the units, the ROM lines, the served commands and the card timeouts first and the display's log and the packets last (firmware only, boot mode and flash).
+
+Both boards on the laptop at once is fine electrically and they are separate USB devices. "flash onto SRAM" (make flash-fpga) loads the bitstream into the FPGA's own configuration memory, not the SDRAM chip; the machine's memory is untouched, it works as it did, it is faster than the flash write, and it needs no power-cycle: the BL616 notices the FPGA reconfigure and restarts itself. Lost at power-off, that is all.
+
+The two steps that resist automation: the FTDI refusal is a host matter - something on the laptop opens the Tang's serial port (ModemManager probing /dev/ttyUSB* is the usual culprit) and the JTAG then cannot be opened until a replug; a udev rule that tells ModemManager to ignore the Tang's chip would end it, and that is a change on your host, so yours to make - say and I write the rule. Boot mode on the BL616 is a hardware matter: its ROM bootloader wants BOOT held at reset. This firmware has no update-from-card path (the siblings' flashwr for the FPGA's flash is wired but no OSD entry uses it); adding a self-update of the BL616 from the card is possible with the SDK's flash writes but a bad write is a boot-mode reflash anyway. The lower-risk automation: the FPGA by SRAM load (no replug once ModemManager is quiet, no power-cycle) and the firmware only when it changes.
+
+For the debug grab, one thing would remove the OSD from the loop entirely: the FPGA's UART to the Tang's USB chip (tang-ultima's coreload line, idle here) could stream the debug windows to /dev/ttyUSB1 on request, readable with a terminal or a script. It is a small module, and the design sits at the clock's limit (64.82 MHz), so it is a build-and-see. Say if you want it.
+
+lets finalize current loop first (and stop generating firmwares further). flash companion and I'll provide numbers
+
+****
+
+Flashed and verified. No more firmware until the numbers say what they say. Tap RESET on the BL616 (the FPGA is unchanged), play to the stop, and the Debug page: units, ROM, served, last, sdc lines.
+
+there was no hang at game beginning;
+dbg under units:
+regs: pg0 64 pg12 115
+regs: pg0 218 pg12 167 662 9 664 13
+regs: scroll 202 230 11;
+pages 1052 wra
+ROM: ini ok, 20 files 179K, 0 missing
+verify 3688 words, 0 bad, 0 unanswered
+served 1127 cmds, 1105 rd 0 wr, 0 err,
+last 031 031 005 005 blk 0 u0
+unit0 1600 blocks
+sdc timeouts 0, read phase 0
+
+****
+
+The card path is clean: 1127 served, 1105 reads, 0 errors, 0 timeouts, the read phase idle, no stall this time. The MCU is fine; the machine stopped on its own. The clue is the previous stop's blit line: "max 1909 lines, 1 cmds" - the longest run was 1412 lines with the same game until I made a row count of 0 mean 256 rows. That change rode a false hypothesis (the flicker was the aliasing) and did something of its own: a game that disables a command by zeroing its rows - nothing in GID's code - now has it write 256 rows somewhere. Memory corruption at random moments; a game stopping in a wait loop at varying points is what that looks like.
+
+0.1.17: a row count of 0 is nothing again. FPGA only; the bitstream is in its gate. Then "flash tang" (the SRAM load: no power-cycle, the BL616 restarts itself) and play.
+
+flash tang
+
+****
+
+Loaded into the FPGA's SRAM, 100%. The BL616 restarts itself; play.
+
+game does not hang now! companion firmware update allowed also (ok, I can survive several more replugs as results are good)
+so:
+- remove all nasty debug lines from companion - they not needed anymore (yet)
+- I need clear dave game keys which I can press on my pc keyboard - especially the one allows to redefine keys - as I can not fire atm
+- something happened with sound - check this path also
+
+****
+
+Dave runs. The day's debugging aids are out of both halves (0.1.18): the display's write log, the blitter's packet read and its shadow, the register and run counters, SYS commands 12 and 13; the Debug page keeps the machine's state, the page table's count, the units, the ROM verify and the controller's lines. Lint clean; the firmware built and tested; the bitstream and a 1 s boot run building.
+
+Keys: the game's menu key is КТ, which is Esc on the PC keyboard (mcu.md's map: Esc КТ, F1 ПОВТ, F2 ВС, F3 ГРАФ, Alt АР2, Left Ctrl РУС, Win ЛАТ, Right Ctrl СУ, F10 СТОП, F11 reset, F12 the OSD; the arrows are the arrows). "KT for menu" on the credits screen is that; the redefinition should be in it. The default fire key I do not know - the port's own; try Space, Enter, Alt (АР2) and the Ctrls before redefining. The joystick on 177714 is a USB gamepad through the OSD's Joystick setting, not keys.
+
+Sound: the simulation still puts sound out after the page table (502725 of 502726 sample frames non-zero in the ANDOS run). What changed near it today: the sound DMA's reads go through the page table (two clocks more each) and the 50 Hz timer is frame-locked; the AYs and the Covox are untouched. To go on I need the symptom: gone, distorted or crackling, wrong pitch or tempo, or only some sounds (music, effects) - and whether the title screen's music is right.
+
+flash companion
+
+****
+
+Flashed and verified. The cleaned bitstream meets timing with room again (67.1 MHz, BSRAM 31/46). Now "flash tang" for the SRAM load.
+
+flash tang onto flash
+
+****
+
+Written to 100%, Done. The 1 s boot check of the cleaned design is clean (the ROMs over the link 0 wrong, config 0 wrong, read-after-write 338399 words 0 wrong). Power-cycle; then the game, Esc for its menu, and the sound's symptom.
+
+sound is some scratchy noise instead of game sounds
+
+****
+
+Two things bound it. The sound paths were never checked beyond "not silent", in simulation or on a board; and the one change today on the sound's route is the memory, where the sound DMA's reads go through the page table - checked: its address is a 16-bit-word address stepping by two per 32-bit fetch, so the widened [23:1] is right, and a read of an unwritten page is zeros, silence, not noise. The IMA decoder reads as the standard (low nibble first, the step table, the index clamp); the mix is MAXIOL's. Digitised sound that comes out as scratch is usually the DMA path; music that comes out as scratch would be the AYs.
+
+So two facts from you split the search: was the sound right with the earlier builds today (the title's music, say)? And does the title screen's music play right now, with the noise only in the game? Meanwhile the testbench can dump its sound output as raw PCM (+WAV=), and a run to the game's title with the dump from 48 s is going (two hours) - the waveform itself, to look at.
+
+lets stop for now, prepare handover and stop shells
+
+****
+
+Both simulations stopped (the old level run at its last seconds, the title run with the sound dump at its start). Handover in progress.md ("Handover (23 September 2026, 22:00)"): the game runs on the board with 0.1.17/0.1.18 flashed; open are the sound (scratchy noise - the DMA/AY paths never verified; two facts asked for; the testbench's +WAV dump and the title-run command to get the waveform), the fire key (the menu is Esc), the flash automation (a udev rule on the host, the SRAM load), and that nothing is committed since 19 Sep.

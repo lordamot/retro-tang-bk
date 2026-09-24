@@ -1,0 +1,54 @@
+check sibling repos. espececially ../tang-uknc. I want BK0011M tang, compatible with ultima; put dangerous dave port into soft - and yeah, I want "AZBK" there, without wifi and network part. But dave should be run
+
+****
+
+Built from an empty repository in one session: BK Nano, the БК-0011М with
+MAXIOL's AZBK controller (no network) on the Tang Nano 20K, to the ZS-256
+Nano / UKNC Nano framework so ../tang-ultima can carry it.  Nothing has
+been on a board.  Nothing is committed (git.md: ask first) - the whole
+tree is untracked.
+
+What is proven, and how:
+- Builds and meets timing: make bitstream passes the gate at 64.8 MHz
+  (Fmax 67.2 MHz, logic 52%, BSRAM 25/46); bin/tang.fs and bin/bl616.bin
+  are that build.  make fw builds; make menu-test walks the OSD with 0
+  errors; make lint is clean of errors.
+- Simulates: AZBOOT's two passes, the БК monitor's box at 0.3 s, the AZBK
+  BIOS screen at 3.8 s (every line OK, Lan/RTC date, CMOS load OK, card
+  size, the setup configuration), and ANDOS 3.30 booting from
+  WRKANDOS2.IMG in unit 0 to its splash at 13.8 s of machine time - 65
+  block reads served by the MCU stand-in, the SDRAM read-after-write
+  check clean over 2.8 million words.  Frames in sim/frames/.
+
+Dangerous Dave is not in the tree: its image is only downloadable after
+registering at hof.maxiol.com/top/10.  It goes into /bk/DISKS on the
+card and is named in AZ.INI as a Dn= line or chosen in the OSD; the
+firmware version it checks (18) is what 177370 and the controller answer.
+Nothing has been tried with it.
+
+The design: Vslav's 1801VM1 (MiSTer BK0011M) at 4.05 MHz on one 64.8
+MHz clock; one 8 MB SDRAM behind a five-port arbiter (processor first);
+the AZ mapper with the BK's own memory behind unclaimed windows; the
+1024x768 display fetched line by line into BSRAM; the blitter, two
+YM2149s, the Covox, the sound DMA with a pipelined ADPCM decoder; the
+controller's registers and 8192-word buffer in the FPGA with the
+card/clock/ini commands served by the BL616 over a fifth SPI target;
+the keyboard as КОИ-7 codes translated on the MCU.  The behaviour is
+GID's BKemu 4.6 model (Dave was developed on it) and forum.maxiol.com.
+
+Traps found the first evening and recorded in CLAUDE.md: the VM1's
+casex microcode matrices match nothing in Verilator; the video port
+starved the processor; unclaimed windows must be the BK's own memory;
+the start address flag must clear at the end of the 177716 read;
+177230-177256 straddle a 32-byte decode boundary; the controller's data
+register must stand still for a whole read strobe; Gowin's EX2000 and
+PA2122; the ADPCM decoder's 17.8 ns.
+
+Known caveats: the BIOS measures the processor as 6 MHz (no wait
+states modelled; timing loops run fast); AZBOOT waits about 1.2 s for
+DHCP at every boot; the screenshot command answers an error; the display
+is 59.8 Hz; nothing after ANDOS's splash has been exercised (blitter,
+DMA, AYs, keyboard end to end, block writes, the OSD's unit selection).
+
+Next: the games disk in simulation for the blitter and sound; a board;
+../tang-ultima's core table (mcu.md's last section says what).

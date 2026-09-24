@@ -1,0 +1,185 @@
+lets start from questions.
+1) you said that I can connect both companion and tang to laptop at the same time. but they are connected in between - wont it create unnecessary currents and burnout because of that?
+2) which audio devices azbk support?
+
+****
+
+Both answers come from the wiring table in the README and the sound section of platform.md.
+
+1) Two USB cables at once. Your concern is fair, and I should have qualified what I said. The seven wires include a +5 wire, and on both boards that pin is the USB connector's VBUS with nothing in between. So with both cables in, the laptop's two ports are tied together through that wire.
+
+- In practice this is low risk when both ports are on the same laptop. They sit within a few tens of millivolts of each other, the equalising current is small, and USB ports have overcurrent protection. This is how MiSTeryNano users flash the BL616 with it still wired up.
+- It is a real risk when the two sources differ: one board on a phone charger and the other on the laptop, or a hub with its own supply. Then one supply back-feeds the other, and hosts are not designed to sink current on VBUS.
+- The clean way: only one cable carries power at a time. For flashing the BL616, plug in the Dock's cable alone. The +5 wire then feeds the Tang Nano from the Dock, which is fine. For flashing the FPGA, plug in the Tang Nano alone, and the Dock is fed from it as in normal use. If you want both plugged in for a long session with the UART on the Tang Nano and the BL616 console on the Dock, pull the +5 wire while doing it.
+
+Note the Tang Nano's SRAM bitstream is lost at power-off, so a bitstream loaded into SRAM goes away when you swap cables. Flash it to SPI flash for a session that swaps cables.
+
+2) The AZBK's sound devices, as this design implements them after GID's emulator:
+
+- The BK's own speaker, bits 6, 5, 2 of 177716, mutable by bit 2 of 177212.
+- Two AY chips at 177172-177175, either YM2149 or AY8910 by bit 3 of 177212, plus the BK world's Spectrum-style access through 177714.
+- The Covox: 16-bit stereo at 177200-177206, and the legacy 8-bit Covox on 177714.
+- The sound DMA at 177160-177170: 16-bit PCM mono, IMA ADPCM mono and IMA ADPCM stereo, all at 44100 Hz, streamed from the 32 MB space.
+
+The mix is MAXIOL's: right channel is A plus B of both AYs, left is C plus B, and everything else goes to both. The result leaves the board on the Dock's I2S DAC and inside the HDMI stream. Nothing else is in the register map: no MIDI, no General Sound, no SID. Status of all this on the board is in progress.md, and the open item there is noise on the sound.
+
+So, can we prepare disk image with clean way to test those audio devices - each one using separate program?
+
+****
+
+(the work: soft/src/ - five ANDOS programs, bk.mac; tools/macro11 fetched, tools/binlink.py, tools/andosput.py, tools/tonegen.py, tools/pcmscan.py; make soft, make soft-image -> build/SNDTEST.IMG; docs; six simulations started in parallel, one a program plus the package's own AY_TEST)
+
+Everything that can be done before the simulations report is done. The six runs are at roughly 10 s of machine time; the first screen after the typed name is due in about 25 minutes, and the waiter will wake me then.
+
+whats the shell progress?
+
+****
+
+No visible progress yet, and that is partly my setup: the six runs write their console output through a pipe, so Verilator buffers every $display line until the run ends. The only live signs are the files, and there are none yet. Every process is at 100% of a core for 57 minutes, load average 6.4 on 20 cores, so they are running, not stuck. At the documented rate of 10 ms of machine time per wall second the first frames were due around 09:56; they have not appeared, so six parallel runs are slower than one, most likely cache contention on the SDRAM model. If nothing has appeared by about 11:00 I will kill all but one run and rerun them one at a time with line-buffered output.
+
+lets just stop them at a time if no progress visible - no reruns yet
+
+****
+
+Understood: no reruns. A watcher checks once a minute until 11:00; if a frame appears it exits and leaves the runs alone, if none has by 11:00 it kills all six and reports.
+
+(10:39: frames appeared - ANDOS's two-panel shell with the A> line at 20 s; the runs went on.  The dumps read as noise at first: the testbench's I2S receiver took every word a bit early - fixed in tb_top.v, pcmscan --skew repairs the old dumps; the dump rate is 50625 pairs a second.  Interim findings at 10:55: speaker square wave, DMA PCM sine, Covox left ramp, AY tone on the right all present; the AY through 177714 the BK way silent - MiSTer's BK0011M.sv says the word write selects and the low-byte write loads, the design decodes the reverse; a SOB pass is 4.5 us, not 2; my AY period 242 was octal; silence is a DC of -3060.)
+
+I do not see shell running still - only montor. Is all ok?
+
+****
+
+All is fine. The shell is gone from the screens because each program runs full screen after ANDOS loads it, and the monitor is the only thing I have running besides the six simulations. What I got wrong is the runs' length: the testbench counts RUN_MS from after the last typed key, not from power-on, so the runs end at 50 to 61 s of machine time instead of 29 to 40. Every program finishes by about 40 s, so I'll let them reach 41 s, then stop them rather than burn another hour on silence.
+
+(stopped at 11:55 with every dump at 41 s; the rest of the results are below)
+
+Done: the disk exists, and its first runs found one defect in the design and one in the testbench.
+
+What was built (all "builds" and "simulates", nothing on a board):
+- soft/src/: five ANDOS programs, one a device. SPKTEST (177716 bits 6, 5, 2, the staircase), AYTEST (both AYs through 177172/177174: A, B, C, chord, noise, envelope), AY714 (the AY through 177714 in three write forms), COVTEST (177200-177206 and the legacy 177714), DMATEST (PCM 16-bit, IMA mono, IMA stereo, looping and one-shot with the DONE bit, pages 400-402 through window 3). bk.mac is what they share.
+- tools/: macro11 (fetched by fetch.sh's new step 8), binlink.py (object to headerless ANDOS program), andosput.py (files onto a FAT12 ANDOS image, the load address in the directory entry's time field, where ANDOS keeps it), tonegen.py (the DMA tables, its IMA coder checked against a mirror of azsound.v's decoder), pcmscan.py (a testbench dump window by window).
+- make soft, make soft-image -> build/SNDTEST.IMG; make card stages it as DISKS/SNDTEST.IMG. Type the program's name at the A> line.
+- Docs: build.md, tools.md, README, CLAUDE.md's traps, CHANGELOG 0.1.19 (VERSION bumped, firmware rebuilt for the caption; no design change).
+
+What the simulation showed (six runs in parallel, 4 ms of machine time a second, stopped at 41 s):
+- Works: the speaker's three bits with GID's weights; both AYs through 177172/177174 with A on the right, B on both, C on the left, noise and envelope; every Covox register, the legacy mono and stereo; the DMA's PCM, IMA mono and IMA stereo from pages 400-402, the one-shot's DONE flag, 177170 reading the page. All of that as the emulator's software uses it.
+- Defect 10 (the design): the AY through 177714 the BK world's way is silent. MiSTer's BK0011M.sv and the package's own AY_TEST select the register with a word write and load it with a low-byte write, both inverted; azsound.v takes a high-byte write as the select (that form does sound). The BK-world AY music is silent here. Not changed: the fix is a few lines plus GID's chip select from the word's top two bits, which needs the emulator's source.
+- The testbench's I2S receiver took each word one bit early, so every dump before today looked like noise; fixed, the simulator rebuilt, pcmscan --skew repairs old dumps. This says nothing about the board's noise.
+- Silence is a DC of -12240 in the mix (the AY centring); noted as defect 11.
+- Program-side corrections, in the sources and the rebuilt image: a SOB pass is 4.5 us, the AY period constants were octal, the Covox byte step wrote two registers at once.
+
+Not done: no rerun with the corrected image (your call); nothing on a board; nothing committed.
+
+fix defects, rebuild files for board and sdcard, and rerun tests to check before flashing
+
+****
+
+Done, apart from two confirmation runs still going. Nothing is flashed and nothing is committed.
+
+Fixed in azsound.v:
+- The AY through 177714 now follows the BK's protocol as MiSTer's BK0011M has it: a word write selects the register, a low-byte write loads it, both inverted from the low byte. Bit 14 of the written word names the second chip, my reading of GID's chip select, marked as such in platform.md.
+- The AYs go through the DC blocker with the Covox and the speaker, so silence is 0 instead of a DC of -12240.
+
+Built:
+- bin/tang.fs (12:48) passed the timing gate: 0 setup and 0 hold violations, the two PR1014 lines the SPI clock pin's and the crystal's, logic 56%, registers 35%, BSRAM 31 of 46.
+- bin/bl616.bin is 0.1.19, the caption only.
+- build/card/bk/ is the card: AZ.INI, ROM/, DISKS/ with SNDTEST.IMG, eeprom.dat. Copy it onto the card as /bk, pick SNDTEST.IMG as AZ0 in the OSD, and type a program's name at the A> line.
+
+Rerun on the fixed design with the corrected receiver, six programs in parallel, stopped at 15:25 with every program over:
+- Silence is 0 on both sides.
+- SPKTEST: 504 Hz square waves, bit 6, bit 5, bit 2 with GID's weights, all three, the staircase.
+- AYTEST: chip 1 A right, B both, C left, chord, noise, envelope; chip 2 the same.
+- AY714: the BK world's protocol now plays A, B, C and the chord; the old form is silent; bit 14 reaches chip 2. Defect 10 is fixed.
+- COVTEST: six of seven steps right; the legacy stereo step was silent because my program set 177212 from a clobbered register. Fixed in the program; a unit test of azsound.v alone shows the ramp on both sides through that path; a rerun of the program alone is going.
+- DMATEST: PCM, IMA mono, IMA stereo, the one-shot's DONE flag, the current page.
+- The package's own AY_TEST never ran in either pass: the testbench types an underscore as a space. My earlier note that it stayed silent was wrong. It is rerunning with its name typed as key codes.
+
+Still open, not blocking: the DC blocker's integer dead zone leaves a residue of up to 63 after a step (0.2% of full scale); the chip select reading needs GID's source.
+
+My recommendation: flash now. The design's every sound path has been seen playing in simulation as the emulator's software drives it; the two runs still going are confirmations of a program fix and of a third-party program.
+
+flash companion
+
+****
+
+Flashed and verified: bin/bl616.bin (0.1.19, 445200 bytes) went onto the BL616 over /dev/ttyACM0, the device's SHA-256 matched the host's, "All programming completed successfully". Press RST on the Dock to start it. The bitstream is not flashed yet: with the Dock's cable in, unplug it first, then plug the Tang Nano alone for make flash-fpga-flash and power-cycle.
+
+flash tang onto flash
+
+****
+
+Written: bin/tang.fs (12:48, the build with both sound fixes) is in the Tang Nano's SPI flash, openFPGALoader reported Done at 100%. Now power-cycle the board (the tool's own reconfigure is not reliable), with the card holding build/card/bk as /bk. First things to watch: the memory self-test LEDs, the OSD, the BIOS screen, ANDOS. Then SNDTEST.IMG as AZ0 and the five programs, and Dave for the noise you heard. The two follow-up simulations are still running; I report them when they end.
+
+sounds are working! everywhere - in SNDTEST and in dave!
+
+****
+
+Recorded in progress.md and the changelog: the board's first word on sound, 24 Sep 16:30, bin/tang.fs of 12:48 and bl616.bin 0.1.19. Yesterday's "scratchy noise" was the 177714 decode: Dave drives the AY the BK world's way, and every register write went to the wrong place. Open after this: the game's fire key; the bit-14 chip select against GID's source; the DC blocker's small dead zone. The two follow-up simulations still run and get reported when they end. Nothing is committed - say when.
+
+hm. what does F11 do? it blanks the screen immediately and then OSD works but even cold reset does not help till tang replug
+
+****
+
+F11 is the СБР (reset) key. The firmware sends a press and a release flag, and keyboard.v keeps a level from them that refills the machine's 16 ms reset hold while it is up. The module handled key events only while the machine was not in reset; the press itself starts a reset and raises INIT, so the release arrived while events were ignored, the level never cleared, and the machine sat in reset. The OSD's cold reset pulses the same hold and cannot clear a level the keyboard owns; only a replug could. Fixed by taking the flagged keys (СТОП, СБР, the hotkeys) whether or not INIT is up. Lint clean; a before/after simulation with the new +RESETKEY_MS= option, the bitstream and a firmware rebuild for the 0.1.20 caption are running.
+
+what is the difference between reset and cold reset in osd menu? they seem behave the same
+
+****
+
+On this design they are the same thing, by construction. Reset sends 'R' as 1 then 0: a level on the machine's reset request whose rising edge is the cold pulse. Cold reset (AZ) sends 'B', which sysctrl.v turns into a one-clock pulse into the same 16 ms hold, with the same cold pulse. Every reset here is a cold reset of the AZ controller (top.v's comment lists the OSD's 'R', S1, command 037 and the СБР key): the mapper's windows cleared, page 100 mapped, 177716 answering 170000 again, the page table emptied - both reboot through AZBOOT. The two entries exist because the siblings' menus have both. A distinct warm reset would be the real BK's reset button (the AZ keeps its mapper, the machine comes up in the BK monitor at 140000/100000, as GID's emulator does on a plain reset); not implemented, and adding it means deciding what the AZ keeps. Your call.
+
+lets remove separate option COld Reset instead (so Reset will do cold reset as before - it is better)
+
+****
+
+Removed: the "Cold reset (AZ)" entry is out of menu.c's BK form; Reset stays and does the cold reset as before. The menu test's expectations were updated to the ten-entry form (0 errors), the docs and README (both languages) say Reset is the AZ's cold reset too, the changelog carries it under 0.1.20, and bin/bl616.bin is rebuilt (16:53). Flash the companion again when convenient; the change is the menu only.
+
+ok, next one while waiting. docs state that AZ controller itself supports switching standard BK display to be shown as from color output or as from bw one - do we support it?
+
+****
+
+Not yet. The AZ's legacy screen is a mode of 177230 (bits 2:0 = 0: 1 bit a pixel, 512 wide, the monochrome pair; 1: 2 bits, 256 wide, the 4-colour set 177662 picks); software sets it and the BK's own programs never touch it. The switch is the controller's hotkey АР2+ЛАТ (Alt+Win), and the palette reset АР2+РУС (Alt+Left Ctrl): the firmware decodes both and keyboard.v turns them into a one-clock pulse that goes nowhere in top.v. To support it the FPGA would toggle 177230 between the two forms on hotkey 1 and reload the legacy palette cells on hotkey 2; a small change, untested against what MAXIOL's controller does exactly. Your call.
+
+lets add support for all such AZ hotkeys
+
+****
+
+Done for the two the controller has (SETUP.ROM's АР2+digits are the setup program's own keys; neither forum thread lists others). azvideo.v now takes the hotkey code: Alt+Win flips 177230 between mode 0 with stretch x2 and mode 1 with x4 while it is in one of them; Alt+Left Ctrl reloads palette cells 256-337 from the power-up table (az_palette.v's new reload port, 82 clocks, generated by tools/palette.py). Wired in top.v, lint clean, documented in mcu.md, video.md, the READMEs and the changelog under 0.1.20. The F11 before/after simulation: the old design stopped at the press with a black screen, the new one restarted through AZBOOT's two resets and drew the BIOS. A hotkey simulation and the 0.1.20 bitstream are running.
+
+flash companion
+
+****
+
+Flashed and verified: bin/bl616.bin 0.1.20 (the menu without "Cold reset (AZ)") onto the BL616 at 17:16, SHA matched. Press RST on the Dock.
+
+flash tang onto flash
+
+****
+
+Written: bin/tang.fs 0.1.20 (17:10; the F11 fix, the two hotkeys, the sound fixes of the morning) is in the Tang Nano's SPI flash, Done at 100%. Power-cycle. The hotkey simulation landed just before: 1 ms after Alt+Win in the monitor's box 177230 went 012100 -> 012201 (the colour view), and after Alt+Left Ctrl two palette cells the testbench had spoiled were back to their table values. To try on the board: F11 must now come back through AZBOOT's beep; Alt+Win in the BK monitor or ANDOS should switch the picture between the 512 monochrome and the 256 colour views; Alt+Left Ctrl restores the palettes.
+
+(the two follow-up simulations, reported after the flash: COVTEST's rerun with the fixed program played the legacy stereo step on both sides, all seven steps right; the package's own AY_TEST, GID's of 2012, runs - "Тест1: проверка частотного диапазона. Каналы: A" - and sounds through 177714 the BK way on the fixed decode.)
+
+ repo license file must contain Maxiol also
+
+****
+
+Rewritten: LICENCE.md was still Korvet Nano's (its third-party list named the КР580ВМ80А, the Z80, the Корвет ROMs). Now it is BK Nano's: the MIT text in both languages with this repository's copyright lines, and a third-party section that opens with MAXIOL - the AZBK is his design, tang/src/bk/az*.v are written against his documentation and are not his code, and soft/azbk/ is his card package redistributed as he publishes it - then GID's BKemu (the model, the palette tables, the IMA decoder, AY_TEST), the БК's own ROMs, Vslav's 1801VM1 in Sorgelig's wrapper (GPL v2, the one marked change), MiSTer's YM2149, MiSTeryNano and u8g2, the HDMI channel's origin, macro11, and grf's Dave - which is the operator's copy and now in .gitignore, since it is not ours to ship.
+
+check ./prompts/bk-keyboard.png - I want pdf file ./keyboard-ru.pdf showing pc keyboard mapping on it plus additional F keys and hotkeys legend explained, all in russian (and make ./keyboard-en.pdf also); pdf tooling can be found in sibling ./mc0511-elite - lets not take them here of possible
+
+****
+
+Done: keyboard-ru.pdf and keyboard-en.pdf at the root, from tools/keyboard_pdf.py (make keyboard) - Pillow only, one raster page the way mc0511-elite's control_pdf.py does it, nothing copied from there. The picture is prompts/bk-keyboard.png at 3x; every key whose PC key is not simply its own Latin letter carries a red label (F1 on ПОВТ, Esc on КТ, Delete/Insert on |<-- and |-->, F10 / Pause on СТОП, F3 on ГРАФ, Backspace, Tab, Right Ctrl on СУ, Enter, Caps Lock on СТР, Shift on ЗАГЛ, Left Ctrl on РУС, Alt on АР2, Win on ЛАТ; on the digit row the PC key of the key's upper symbol - Shift+7 for &, Shift+9 for ( and so on; on Ш Щ Ъ Э Ч Ю the key that gives the letter in РУС). Under it the legend: the modes, the six letters on symbol keys, the symbols, the function keys, the other keys, the AZBK hotkeys, the menu. Drawing it exposed a firmware gap: Ъ (code 0177) had no key at all and Ш Щ Э Ч Ю needed Shift in РУС; bk.c now gives the letter on [ ] \ Shift+6 Shift+2 and Ъ on Shift+], as the БК's own keyboard does. That is 0.1.21, firmware only, rebuilt into bin/bl616.bin; flash the companion when convenient.
+
+I also see OSD "about" window contents are not recent ones
+
+****
+
+Rewritten: the About page had the first day's text. It now opens with "BK Nano 0.1.21" (the version from VERSION, as the caption already did), then the authors and licences, what the machine is and does (the BK, the AZBK's parts, no network; Dave runs, ANDOS/MKDOS/the monitor boot), the keys worth knowing (F12, F11, Alt+Win, Alt+Left Ctrl, the key-map PDFs) and the credits (MAXIOL, GID, Vslav, Sorgelig, MikeJ, the siblings, Harbaum). Trimmed to fit the OSD's 48-line text page; the menu test walks it with 0 errors; bin/bl616.bin rebuilt - flash the companion to see it.
+
+flash companion
+
+****
+
+Flashed and verified: bin/bl616.bin 0.1.21 (the РУС letters on the symbol keys, the About page) onto the BL616 at 17:48, SHA matched. Press RST on the Dock. The FPGA stays at 0.1.20; nothing in 0.1.21 touches it.
