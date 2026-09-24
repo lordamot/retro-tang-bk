@@ -1,0 +1,16 @@
+.idea
+.vscode
+
+# Fetched toolchain and build products - see Makefile and tools/fetch.sh.
+# The scripts in tools/ are force-added (git add -f tools/*.py tools/*.sh).
+/tools/
+/build/
+# grf's Dangerous Dave: the operator's copy, from hof.maxiol.com, not ours to ship
+/soft/azbk/DISKS/dave.img
+/sim/out/
+/mnano/build/
+
+# Gowin's scratch under tang/impl/ (tang/impl/pnr/ is kept on purpose)
+/tang/impl/gwsynthesis/
+/tang/impl/temp/
+__pycache__/
