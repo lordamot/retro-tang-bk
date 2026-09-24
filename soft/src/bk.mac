@@ -1,0 +1,94 @@
+; bk.mac - what the sound test programs on soft/src/ share.
+;
+; A test is an ANDOS program: headerless, loaded at 1000 and started
+; there (tools/binlink.py, tools/andosput.py), typed by name at the A>
+; line.  It prints what it is about to play through the monitor's EMT 16,
+; plays it, and at the end waits for a key (EMT 6) and leaves the way
+; the package's own AY_TEST does, through 100000.  СТОП (vector 4) goes
+; through the program's QUIET routine first, so nothing is left sounding.
+;
+; Included once at the top, after  .ASECT  and  . = 1000  (macros and
+; equates only); RUNTIME at the end expands the routines.
+;
+; Delays are SOB loops: 4.5 us a pass at 4.05 MHz (measured in the
+; simulation of 24 Sep 2026: 500 passes a half period gave 224 Hz), half
+; that in turbo - a pitch here is "about", the sound's presence is the
+; point.
+
+	.MACRO	PRINT	S		; ASCIZ at S
+	MOV	S,R1
+	CALL	PUTS
+	.ENDM
+
+	.MACRO	DELAY	N		; N passes, ~4.5 us each; N < 65536
+	MOV	N,R0
+	SOB	R0,.
+	.ENDM
+
+	.MACRO	SECOND			; about a second
+	CALL	WAIT1
+	.ENDM
+
+	.MACRO	RUNTIME
+PUTS:	MOVB	(R1)+,R0
+	BEQ	1$
+	EMT	16
+	BR	PUTS
+1$:	RETURN
+
+; R1 in octal, six digits
+OCTAL:	MOV	R2,-(SP)
+	CLR	R0
+	ASL	R1
+	ROL	R0
+	ADD	#'0,R0
+	EMT	16
+	MOV	#5,R2
+2$:	CLR	R0
+	ASL	R1
+	ROL	R0
+	ASL	R1
+	ROL	R0
+	ASL	R1
+	ROL	R0
+	ADD	#'0,R0
+	EMT	16
+	SOB	R2,2$
+	MOV	(SP)+,R2
+	RETURN
+
+WAIT1:	MOV	R5,-(SP)
+	MOV	#10.,R5
+3$:	DELAY	#22000.
+	SOB	R5,3$
+	MOV	(SP)+,R5
+	RETURN
+
+; the end: a key, then back to ANDOS
+FINISH:	PRINT	#DONE
+	EMT	6
+STOP:	CALL	QUIET
+	JMP	@#100000
+
+DONE:	.ASCIZ	/DONE - ANY KEY/<12>
+CRLF:	.ASCIZ	<12>
+	.EVEN
+	.ENDM
+
+SPK	= 177716
+AY1	= 177172
+AY2	= 177174
+AYBK	= 177714
+CVXL	= 177200
+CVXR	= 177202
+CVXM	= 177204
+CVX8	= 177206
+CVXC	= 177212
+DMACSR	= 177160
+DMAPG	= 177162
+DMALH	= 177164
+DMALL	= 177166
+DMACUR	= 177170
+WPAGE3	= 177306			; window 3 (30000-37777): its page
+WACT	= 177340
+WRO	= 177342

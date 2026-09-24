@@ -1,0 +1,130 @@
+	.TITLE	DMATEST - the sound DMA: PCM 16-bit, IMA ADPCM mono and stereo
+;
+; Three tables (tools/tonegen.py, 2048 bytes each) are copied into pages
+; 400, 401 and 402 of the AZ's memory through window 3 (30000-37777,
+; mapped for the copy and unmapped after, its registers put back) and
+; played by the DMA in a loop, about two seconds each:
+;   PCM 16-bit mono, a sine at 430.7 Hz (format 0)
+;   IMA ADPCM mono, the same (format 4)
+;   IMA ADPCM stereo, left 430.7 Hz, right 646 Hz (format 5)
+; and then the PCM once more as a one-shot, polling 177160's DONE bit:
+; "DONE FLAG SET" or "NO DONE FLAG".  The current page (177170) and the
+; control word are printed after each.
+;
+; The pages are above the BK's 128 KB and the ROM slots (platform.md),
+; in the free RAM; their first write allocates them in sdram.v's table.
+;
+	.ASECT
+	. = 1000
+	.INCLUDE bk.mac
+
+WIN3	= 30000
+WBIT	= 10				; window 3's bit in 177340/177342
+LEN	= 1024.				; words a table has
+PLAY	= 1				; 177160: start, looping
+ONESHOT	= 3				; start, once
+STOPIT	= 4
+
+START:	MOV	#STOP,@#4
+	PRINT	#TITLE
+	MOV	@#WPAGE3,SPAGE
+	MOV	@#WACT,SACT
+	MOV	@#WRO,SRO
+	MOV	#STOPIT,@#DMACSR
+
+	PRINT	#S1
+	MOV	#400,R4
+	MOV	#PCMDAT,R5
+	CALL	LOAD
+	MOV	#<0*1000+PLAY>,R3
+	CALL	RUN
+	PRINT	#S2
+	MOV	#401,R4
+	MOV	#IMAMON,R5
+	CALL	LOAD
+	MOV	#<4*1000+PLAY>,R3
+	CALL	RUN
+	PRINT	#S3
+	MOV	#402,R4
+	MOV	#IMAST,R5
+	CALL	LOAD
+	MOV	#<5*1000+PLAY>,R3
+	CALL	RUN
+
+	PRINT	#S4
+	MOV	#400,R4
+	MOV	#<0*1000+ONESHOT>,R3
+	CALL	SETUP
+	MOV	#20.,R2			; 20 x 22000 passes: ~2 s
+1$:	DELAY	#22000.
+	BIT	#10,@#DMACSR
+	BNE	2$
+	SOB	R2,1$
+	PRINT	#NODONE
+	BR	3$
+2$:	PRINT	#DONE1
+3$:	CALL	SHOW
+	MOV	#STOPIT,@#DMACSR
+	CALL	QUIET
+	JMP	FINISH
+
+; R4: the page, R5: the table.  Map the page into window 3, copy, unmap.
+LOAD:	MOV	R4,@#WPAGE3
+	BIC	#WBIT,@#WRO
+	BIS	#WBIT,@#WACT
+	MOV	#WIN3,R1
+	MOV	#LEN,R2
+1$:	MOV	(R5)+,(R1)+
+	SOB	R2,1$
+	BIC	#WBIT,@#WACT
+	RETURN
+
+; R4: the page, R3: the control word.  Program the player and start it.
+SETUP:	MOV	#STOPIT,@#DMACSR
+	MOV	R4,@#DMAPG
+	CLR	@#DMALH
+	MOV	#LEN,@#DMALL
+	MOV	R3,@#DMACSR
+	RETURN
+
+; ...and let it loop for two seconds, then say what the registers read
+RUN:	CALL	SETUP
+	SECOND
+	SECOND
+	CALL	SHOW
+	MOV	#STOPIT,@#DMACSR
+	RETURN
+
+SHOW:	PRINT	#CUR
+	MOV	@#DMACUR,R1
+	CALL	OCTAL
+	PRINT	#CSR
+	MOV	@#DMACSR,R1
+	CALL	OCTAL
+	PRINT	#CRLF
+	RETURN
+
+QUIET:	MOV	#STOPIT,@#DMACSR
+	BIC	#WBIT,@#WACT
+	MOV	SPAGE,@#WPAGE3
+	MOV	SACT,@#WACT
+	MOV	SRO,@#WRO
+	RETURN
+
+SPAGE:	.WORD	0
+SACT:	.WORD	0
+SRO:	.WORD	0
+TITLE:	.ASCIZ	/DMATEST - THE SOUND DMA, 177160-177170/<12>
+S1:	.ASCIZ	/PCM 16-BIT MONO, 430 HZ, PAGE 400, LOOPING/<12>
+S2:	.ASCIZ	/IMA ADPCM MONO, 430 HZ, PAGE 401, LOOPING/<12>
+S3:	.ASCIZ	/IMA ADPCM STEREO, L 430 R 646 HZ, PAGE 402, LOOPING/<12>
+S4:	.ASCIZ	/PCM ONE-SHOT, WAITING FOR DONE/<12>
+DONE1:	.ASCIZ	/  DONE FLAG SET/<12>
+NODONE:	.ASCIZ	/  NO DONE FLAG IN 2 S/<12>
+CUR:	.ASCIZ	/  177170=/
+CSR:	.ASCIZ	/ 177160=/
+	.EVEN
+	.INCLUDE tones.mac
+	.EVEN
+	RUNTIME
+	.END	START

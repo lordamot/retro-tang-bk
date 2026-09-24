@@ -1,0 +1,63 @@
+	.TITLE	SPKTEST - the BK's speaker: 177716 bits 6, 5 and 2
+;
+; A square wave on each of the three speaker bits in turn, then on all
+; three, then a staircase through the eight combinations - the AZ
+; weights the bits (GID's SetSpeaker: 6, 5, 2 and 2 again), so the
+; three tones differ in loudness and the staircase is a coarse ramp.
+; 177212 bit 2 must be clear (the BIOS setup's "speaker ON").
+;
+	.ASECT
+	. = 1000
+	.INCLUDE bk.mac
+
+HALF	= 220.				; half period in delay passes (~1 ms: ~500 Hz)
+PERIOD	= 500.				; periods a tone lasts (~1 s)
+
+START:	MOV	#STOP,@#4
+	PRINT	#TITLE
+	PRINT	#S1
+	MOV	#100,R2
+	CALL	TONE
+	PRINT	#S2
+	MOV	#40,R2
+	CALL	TONE
+	PRINT	#S3
+	MOV	#4,R2
+	CALL	TONE
+	PRINT	#S4
+	MOV	#144,R2
+	CALL	TONE
+	PRINT	#S5
+	MOV	#200.,R3		; 200 staircases of 8 steps of ~1 ms: ~1.6 s at ~125 Hz
+1$:	MOV	#LEVELS,R4
+	MOV	#8.,R5
+2$:	MOV	(R4)+,@#SPK
+	DELAY	#HALF
+	SOB	R5,2$
+	SOB	R3,1$
+	CALL	QUIET
+	JMP	FINISH
+
+; R2: the bits.  PERIOD periods of HALF on, HALF off.
+TONE:	MOV	#PERIOD,R3
+1$:	MOV	R2,@#SPK
+	DELAY	#HALF
+	CLR	@#SPK
+	DELAY	#HALF
+	SOB	R3,1$
+	RETURN
+
+QUIET:	CLR	@#SPK
+	RETURN
+
+LEVELS:	.WORD	0,4,40,44,100,104,140,144
+
+TITLE:	.ASCIZ	/SPKTEST - THE BK SPEAKER, 177716 BITS 6 5 2/<12>
+S1:	.ASCIZ	/BIT 6 (100): TONE/<12>
+S2:	.ASCIZ	/BIT 5 (040): TONE/<12>
+S3:	.ASCIZ	/BIT 2 (004): TONE/<12>
+S4:	.ASCIZ	/ALL THREE (144): TONE/<12>
+S5:	.ASCIZ	/STAIRCASE 0 4 40 44 100 104 140 144/<12>
+	.EVEN
+	RUNTIME
+	.END	START

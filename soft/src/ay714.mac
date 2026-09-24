@@ -1,0 +1,126 @@
+	.TITLE	AY714 - the AY the BK world's way, through 177714
+;
+; The BK's AY interface on SEL2: the register number is written as a
+; WORD, inverted, and the value as a BYTE, inverted - the package's own
+; AY_TEST (on WRKANDOS2.IMG, source beside it) does exactly that:
+;   MOV #362,@#177714   selects register 13 (362 = ~15)
+;   MOVB R0,@#177714    with R0 = ~value
+; This plays a tone on channel A, B, C and the chord that way (form A),
+; then the same with the register number as a byte write to the high
+; byte, 177715 (form B) - the form azsound.v decodes as of 24 Sep 2026
+; - and last the word form with bit 14 clear in the inverted word,
+; which GID's `~word & 0140000` reads as the second chip.  Whichever
+; sounds says which decode the board has; a BK program uses form A.
+;
+	.ASECT
+	. = 1000
+	.INCLUDE bk.mac
+
+	.MACRO	AYA	REG,VAL		; form A: word register, byte value
+	MOV	#<^C<REG>&177777>,@#AYBK
+	MOVB	#<^C<VAL>&377>,@#AYBK
+	.ENDM
+	.MACRO	AYB	REG,VAL		; form B: high-byte register, byte value
+	MOVB	#<^C<REG>&377>,@#AYBK+1
+	MOVB	#<^C<VAL>&377>,@#AYBK
+	.ENDM
+	.MACRO	AYC	REG,VAL		; the word form with bit 14 set in the register
+	MOV	#<^C<REG+40000>&177777>,@#AYBK
+	MOVB	#<^C<VAL>&377>,@#AYBK
+	.ENDM
+
+START:	MOV	#STOP,@#4
+	PRINT	#TITLE
+	PRINT	#FA
+	CALL	CLRA
+	AYA	7,70
+	AYA	0,242.
+	AYA	1,0
+	AYA	2,192.
+	AYA	3,0
+	AYA	4,162.
+	AYA	5,0
+	PRINT	#SA
+	AYA	10,17
+	SECOND
+	AYA	10,0
+	PRINT	#SB
+	AYA	11,17
+	SECOND
+	AYA	11,0
+	PRINT	#SC
+	AYA	12,17
+	SECOND
+	AYA	12,0
+	PRINT	#SABC
+	AYA	10,17
+	AYA	11,17
+	AYA	12,17
+	SECOND
+	CALL	CLRA
+
+	PRINT	#FB
+	AYB	7,70
+	AYB	0,242.
+	AYB	1,0
+	PRINT	#SA
+	AYB	10,17
+	SECOND
+	AYB	10,0
+	CALL	CLRA
+	CALL	CLRB
+
+	PRINT	#FC
+	AYC	7,70
+	AYC	0,242.
+	AYC	1,0
+	PRINT	#SA
+	AYC	10,17
+	SECOND
+	AYC	10,0
+	CALL	CLRC
+	CALL	QUIET
+	JMP	FINISH
+
+; registers 0-15 to zero, the mixer to all off, in each form
+CLRA:	MOV	#177760,R2		; ~17 .. ~0
+1$:	MOV	R2,@#AYBK
+	MOVB	#377,@#AYBK
+	INC	R2
+	BNE	1$
+	AYA	7,77
+	RETURN
+CLRB:	MOV	#17,R2
+1$:	MOV	R2,R0
+	COMB	R0
+	MOVB	R0,@#AYBK+1
+	MOVB	#377,@#AYBK
+	DEC	R2
+	BPL	1$
+	AYB	7,77
+	RETURN
+CLRC:	MOV	#137760,R2		; ~<40017> .. ~<40000>
+1$:	MOV	R2,@#AYBK
+	MOVB	#377,@#AYBK
+	INC	R2
+	CMP	R2,#140000
+	BLO	1$
+	AYC	7,77
+	RETURN
+
+QUIET:	CALL	CLRA
+	CALL	CLRB
+	CALL	CLRC
+	RETURN
+
+TITLE:	.ASCIZ	/AY714 - THE AY THROUGH 177714/<12>
+FA:	.ASCIZ	/FORM A: WORD = ~REG, BYTE = ~VALUE (AY_TEST'S WAY)/<12>
+FB:	.ASCIZ	/FORM B: BYTE 177715 = ~REG, BYTE 177714 = ~VALUE/<12>
+FC:	.ASCIZ	/FORM C: AS A, BIT 14 SET IN REG (CHIP 2?)/<12>
+SA:	.ASCIZ	/  A 440 HZ/<12>
+SB:	.ASCIZ	/  B 554 HZ/<12>
+SC:	.ASCIZ	/  C 659 HZ/<12>
+SABC:	.ASCIZ	/  A+B+C CHORD/<12>
+	.EVEN
+	RUNTIME
+	.END	START

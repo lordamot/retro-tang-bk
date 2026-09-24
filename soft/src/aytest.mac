@@ -1,0 +1,104 @@
+	.TITLE	AYTEST - the two AYs through the AZ's own registers, 177172 and 177174
+;
+; Chip 1 then chip 2: a tone on channel A, on B, on C, the three as a
+; chord, noise on A, and an envelope on A - each about a second.  A
+; register is written as one word: the register number in the low
+; byte, the value in the high (azsound.v, GID's AZBK).  Right = A + B,
+; left = C + B in the AZ's mix, so A should sit right, C left.
+;
+; Chip clock 1.7 MHz, so a period is 1705000 / 16 / f:
+;   A4 440 Hz -> 242,  C#5 554 Hz -> 192,  E5 659 Hz -> 162 (A major).
+;
+	.ASECT
+	. = 1000
+	.INCLUDE bk.mac
+
+	.MACRO	AYW	CHIP,REG,VAL	; one register
+	MOV	#<VAL*400+REG>,@#CHIP
+	.ENDM
+
+START:	MOV	#STOP,@#4
+	PRINT	#TITLE
+	PRINT	#C1
+	MOV	#AY1,R4
+	CALL	CHIP
+	PRINT	#C2
+	MOV	#AY2,R4
+	CALL	CHIP
+	CALL	QUIET
+	JMP	FINISH
+
+; R4: the chip's register port
+CHIP:	CALL	CLEAR
+	MOV	#<70*400+7>,(R4)	; mixer: tones A B C on, noise off
+	MOV	#<242.*400+0>,(R4)	; A period
+	MOV	#<1>,(R4)		;   high byte 0
+	MOV	#<192.*400+2>,(R4)	; B period
+	MOV	#<3>,(R4)
+	MOV	#<162.*400+4>,(R4)	; C period
+	MOV	#<5>,(R4)
+	PRINT	#SA
+	MOV	#<17*400+10>,(R4)	; A volume 15
+	SECOND
+	MOV	#<10>,(R4)		; A off
+	PRINT	#SB
+	MOV	#<17*400+11>,(R4)
+	SECOND
+	MOV	#<11>,(R4)
+	PRINT	#SC
+	MOV	#<17*400+12>,(R4)
+	SECOND
+	MOV	#<12>,(R4)
+	PRINT	#SABC
+	MOV	#<17*400+10>,(R4)
+	MOV	#<17*400+11>,(R4)
+	MOV	#<17*400+12>,(R4)
+	SECOND
+	MOV	#<10>,(R4)
+	MOV	#<11>,(R4)
+	MOV	#<12>,(R4)
+	PRINT	#SN
+	MOV	#<16*400+6>,(R4)	; noise period
+	MOV	#<67*400+7>,(R4)	; A: noise on, tones off (bit 3 clear, bits 0-2 set)
+	MOV	#<17*400+10>,(R4)
+	SECOND
+	MOV	#<10>,(R4)
+	PRINT	#SE
+	MOV	#<76*400+7>,(R4)	; A tone on, no noise
+	MOV	#<0*400+13>,(R4)	; envelope period 4000: ~1.3 Hz
+	MOV	#<10*400+14>,(R4)
+	MOV	#<16*400+15>,(R4)	; shape: triangle, repeating
+	MOV	#<20*400+10>,(R4)	; A: envelope
+	SECOND
+	SECOND
+	CALL	CLEAR
+	RETURN
+
+; every register of the chip at R4 to zero, the mixer to all off
+CLEAR:	MOV	#<77*400+7>,(R4)
+	CLR	R2
+1$:	MOV	R2,(R4)			; value 0, register R2
+	INC	R2
+	CMP	R2,#16
+	BLO	1$
+	MOV	#<77*400+7>,(R4)
+	RETURN
+
+QUIET:	MOV	#AY1,R4
+	CALL	CLEAR
+	MOV	#AY2,R4
+	CALL	CLEAR
+	RETURN
+
+TITLE:	.ASCIZ	/AYTEST - TWO AYS VIA 177172 AND 177174/<12>
+C1:	.ASCIZ	/CHIP 1 (177172):/<12>
+C2:	.ASCIZ	/CHIP 2 (177174):/<12>
+SA:	.ASCIZ	/  A 440 HZ (RIGHT)/<12>
+SB:	.ASCIZ	/  B 554 HZ (BOTH)/<12>
+SC:	.ASCIZ	/  C 659 HZ (LEFT)/<12>
+SABC:	.ASCIZ	/  A+B+C CHORD/<12>
+SN:	.ASCIZ	/  NOISE ON A/<12>
+SE:	.ASCIZ	/  ENVELOPE ON A, 2 S/<12>
+	.EVEN
+	RUNTIME
+	.END	START

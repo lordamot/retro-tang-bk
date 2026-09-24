@@ -1,0 +1,127 @@
+	.TITLE	COVTEST - the Covox: 177200-177206, and the legacy one on 177714
+;
+; A sawtooth from a timed loop (~70 us a sample, 128 samples a period:
+; about 110 Hz) on each Covox register in turn, about a second each:
+;   177200 16-bit left, 177202 16-bit right, 177204 16 bits to both,
+;   177206 as a word (left in the low byte, right in the high: left only),
+;   177206 as a byte (both),
+;   177714 byte writes with 177212 bit 1 clear and bit 0 clear (mono),
+;   177714 word writes with bit 0 set (stereo: left low byte, right high).
+; 177212 is put back afterwards.  The Covox is unipolar (0 silent,
+; 177777 full) and the AZ blocks its DC, so the ramps are the sound.
+;
+	.ASECT
+	. = 1000
+	.INCLUDE bk.mac
+
+PASSES	= 14000.			; samples a step lasts (~1 s)
+STEP	= 1000				; 512: 128 samples a period
+
+START:	MOV	#STOP,@#4
+	PRINT	#TITLE
+	MOV	@#CVXC,SAVED
+	PRINT	#S1
+	MOV	#CVXL,R4
+	CALL	SAW16
+	CLR	@#CVXL
+	PRINT	#S2
+	MOV	#CVXR,R4
+	CALL	SAW16
+	CLR	@#CVXR
+	PRINT	#S3
+	MOV	#CVXM,R4
+	CALL	SAW16
+	CLR	@#CVXM
+	PRINT	#S4
+	CALL	SAW8W
+	CLR	@#CVX8
+	PRINT	#S5
+	MOV	#CVX8,R4
+	CALL	SAW8B
+	CLRB	@#CVX8
+	PRINT	#S6
+	MOV	SAVED,R1
+	BIC	#3,R1			; legacy on, mono
+	MOV	R1,LEGACY		; (not kept in R1: SAW8B uses it - the rerun of
+	MOV	R1,@#CVXC		; 24 Sep set 177212 from a ramp value at step 7)
+	MOV	#AYBK,R4
+	CALL	SAW8B
+	PRINT	#S7
+	MOV	LEGACY,R1
+	BIS	#1,R1			; stereo
+	MOV	R1,@#CVXC
+	CALL	SAW714
+	CALL	QUIET
+	JMP	FINISH
+
+; R4: the 16-bit register.  R2 runs 0..177777 in steps of STEP.
+SAW16:	MOV	#PASSES,R3
+	CLR	R2
+1$:	MOV	R2,(R4)
+	ADD	#STEP,R2
+	DELAY	#10.
+	SOB	R3,1$
+	RETURN
+
+; 177206 as a word: left = the ramp's high byte, right = 0
+SAW8W:	MOV	#PASSES,R3
+	CLR	R2
+1$:	MOV	R2,R1
+	SWAB	R1
+	BIC	#177400,R1
+	MOV	R1,@#CVX8
+	ADD	#STEP,R2
+	DELAY	#10.
+	SOB	R3,1$
+	RETURN
+
+; a byte to R4 (177206: both channels; 177714: the legacy Covox).  The
+; first run of 24 Sep wrote both at once and the BIOS's "legacy Covox
+; stereo" put the ramp's low byte on the right: one register a step.
+SAW8B:	MOV	#PASSES,R3
+	CLR	R2
+1$:	MOV	R2,R1
+	SWAB	R1
+	MOVB	R1,(R4)
+	ADD	#STEP,R2
+	DELAY	#10.
+	SOB	R3,1$
+	RETURN
+
+; a word to 177714: left the ramp, right the ramp inverted
+SAW714:	MOV	#PASSES,R3
+	CLR	R2
+1$:	MOV	R2,R1
+	SWAB	R1
+	BIC	#177400,R1
+	MOV	R1,R0
+	SWAB	R0
+	COM	R0
+	BIC	#377,R0
+	BIS	R1,R0
+	MOV	R0,@#AYBK
+	ADD	#STEP,R2
+	DELAY	#10.
+	SOB	R3,1$
+	RETURN
+
+QUIET:	CLR	@#CVXL
+	CLR	@#CVXR
+	CLR	@#CVXM
+	CLR	@#CVX8
+	MOV	SAVED,@#CVXC
+	RETURN
+
+SAVED:	.WORD	0
+LEGACY:	.WORD	0
+TITLE:	.ASCIZ	/COVTEST - THE COVOX/<12>
+S1:	.ASCIZ	/177200 16-BIT LEFT/<12>
+S2:	.ASCIZ	/177202 16-BIT RIGHT/<12>
+S3:	.ASCIZ	/177204 16-BIT BOTH/<12>
+S4:	.ASCIZ	/177206 WORD: 8-BIT LEFT, RIGHT SILENT/<12>
+S5:	.ASCIZ	/177206 BYTE: 8-BIT BOTH/<12>
+S6:	.ASCIZ	/177714 BYTE: LEGACY MONO (177212 BITS 1,0 CLEAR)/<12>
+S7:	.ASCIZ	/177714 WORD: LEGACY STEREO, RIGHT INVERTED (BIT 0 SET)/<12>
+	.EVEN
+	RUNTIME
+	.END	START
