@@ -1,0 +1,112 @@
+//Copyright (C)2014-2024 Gowin Semiconductor Corporation.
+//All rights reserved. 
+//File Title: Physical Constraints file
+//Tool Version: V1.9.10
+//Part Number: GW2AR-LV18QN88C8/I7
+//Device: GW2AR-18
+//Device Version: C
+//Created Time: Fri 08 02 23:23:20 2024
+
+IO_LOC "O_tmds_clk_p" 33,34;
+IO_PORT "O_tmds_clk_p" IO_TYPE=LVCMOS33D PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "O_tmds_data_p[0]" 35,36;
+IO_PORT "O_tmds_data_p[0]" IO_TYPE=LVCMOS33D PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "O_tmds_data_p[1]" 37,38;
+IO_PORT "O_tmds_data_p[1]" IO_TYPE=LVCMOS33D PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "O_tmds_data_p[2]" 39,40;
+IO_PORT "O_tmds_data_p[2]" IO_TYPE=LVCMOS33D PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;
+// MCU link - stock MiSTeryNano wiring.  External BL616 / M0S Dock only:
+//   m0s[0] miso  m0s[1] mosi  m0s[2] csn  m0s[3] sclk  m0s[4] irqn
+IO_LOC "m0s[0]" 42;
+IO_PORT "m0s[0]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "m0s[1]" 41;
+IO_PORT "m0s[1]" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_LOC "m0s[2]" 56;
+IO_PORT "m0s[2]" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_LOC "m0s[3]" 54;
+IO_PORT "m0s[3]" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_LOC "m0s[4]" 51;
+IO_PORT "m0s[4]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+// The Tang Nano 20k's own on-board BL616 is NOT used.  MiSTeryNano can
+// drive it over 86/13/76/75/69, and this core did between 30 August 2026
+// and the same afternoon, but pin 69 is the FPGA's TX into that BL616 -
+// the USB-C serial console - and upstream spends it on the SPI interrupt.
+// The internal path was never exercised on hardware here and it costs the
+// console, so it is gone and those five pads are free.  Restoring it means
+// taking 69 back off uart_tx.
+
+// Audio - moved off 51/54/55/56, which the m0s bus now owns.
+IO_LOC "HP_BCK" 71;
+IO_PORT "HP_BCK" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "HP_WS" 72;
+IO_PORT "HP_WS" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "HP_DIN" 73;
+IO_PORT "HP_DIN" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "PA_EN" 74;
+IO_PORT "PA_EN" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "sdclk" 83;
+IO_PORT "sdclk" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+// The USB-C serial, idle: nothing else is on it.  (UKNC Nano:  69 is the FPGA's TX into the on-board BL616
+// and 70 is that BL616's TX back, so with the stock Sipeed firmware in it
+// the console is the USB-C CDC port and needs no adapter.  Upstream
+// reserves header pins 48 and 55 for a USB-UART instead; that is the
+// arrangement to go back to if 69 is ever wanted for the SPI interrupt.
+IO_LOC "uart_tx" 69;
+IO_PORT "uart_tx" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "leds[5]" 20;
+IO_PORT "leds[5]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "leds[4]" 19;
+IO_PORT "leds[4]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "leds[3]" 18;
+IO_PORT "leds[3]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "leds[2]" 17;
+IO_PORT "leds[2]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "leds[1]" 16;
+IO_PORT "leds[1]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "leds[0]" 15;
+IO_PORT "leds[0]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "sddat3" 81;
+IO_PORT "sddat3" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "sddat2" 80;
+IO_PORT "sddat2" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "sddat1" 85;
+IO_PORT "sddat1" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "sddat0" 84;
+IO_PORT "sddat0" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "sdcmd" 82;
+IO_PORT "sdcmd" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "buts[0]" 88;
+IO_PORT "buts[0]" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_LOC "clk27" 4;
+IO_PORT "clk27" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_LOC "uart_rx" 70;
+IO_PORT "uart_rx" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_LOC "buts[1]" 87;
+IO_PORT "buts[1]" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+
+// tang-ultima's core switch.  RECONFIG_N itself - pin 9 - is left a
+// configuration input (the process config's RECONFIG_N: false, so
+// gowin_tcl.py passes no -use_reconfign_as_gpio): reusing it as a GPIO
+// cuts the pad from the configuration controller, and the board showed
+// that on 13 Sep 2026 - the pulse was generated, the pin had nothing
+// else on its net to hold it up, and the FPGA did not reload.  So the
+// pulse comes off an ordinary pin instead and reaches pin 9 over a wire
+// to TP1, the test pad that net ends at (schematic v1.3: PIN09_SYS_RECFG
+// appears only at the FPGA and at TP1).  OPEN_DRAIN, because pin 9 is an
+// input with a weak pull-up and this side must only ever pull it down.
+IO_LOC "reconfig_n" 48;
+IO_PORT "reconfig_n" IO_TYPE=LVCMOS33 OPEN_DRAIN=ON PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+
+// The configuration flash on the MSPI pins (the process config's
+// MSPI: true, so gowin_tcl.py passes -use_mspi_as_gpio 1).  They are the
+// FPGA's own configuration bus until DONE and user logic's afterwards -
+// UG290 4.1.2 table 4-2 - which is how flashwr.v writes the flash and so
+// how a core switch works at all.  MCS_N must idle high.
+IO_LOC "mspi_clk" 59;
+IO_PORT "mspi_clk" IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "mspi_cs_n" 60;
+IO_PORT "mspi_cs_n" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "mspi_do" 61;
+IO_PORT "mspi_do" IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "mspi_di" 62;
+IO_PORT "mspi_di" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;

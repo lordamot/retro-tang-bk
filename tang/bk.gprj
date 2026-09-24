@@ -1,0 +1,45 @@
+<?xml version="1" encoding="UTF-8"?>
+<!DOCTYPE gowin-fpga-project>
+<Project>
+    <Template>FPGA</Template>
+    <Version>5</Version>
+    <Device name="GW2AR-18C" pn="GW2AR-LV18QN88C8/I7">gw2ar18c-000</Device>
+    <FileList>
+        <File path="src/top.v" type="file.verilog" enable="1"/>
+        <File path="src/sys_pll.v" type="file.verilog" enable="1"/>
+        <File path="src/i2s_tx.v" type="file.verilog" enable="1"/>
+        <File path="src/bk/vm1/vm1_se.v" type="file.verilog" enable="1"/>
+        <File path="src/bk/vm1/vm1_qbus_se.sv" type="file.verilog" enable="1"/>
+        <File path="src/bk/vm1/vm1_plm.v" type="file.verilog" enable="1"/>
+        <File path="src/bk/vm1/vm1_tve.v" type="file.verilog" enable="1"/>
+        <File path="src/bk/vm1/vm1_vic.v" type="file.verilog" enable="1"/>
+        <File path="src/bk/cpu.v" type="file.verilog" enable="1"/>
+        <File path="src/bk/azmap.v" type="file.verilog" enable="1"/>
+        <File path="src/bk/sdram.v" type="file.verilog" enable="1"/>
+        <File path="src/bk/keyboard.v" type="file.verilog" enable="1"/>
+        <File path="src/bk/azvideo.v" type="file.verilog" enable="1"/>
+        <File path="src/bk/az_palette.v" type="file.verilog" enable="1"/>
+        <File path="src/bk/azblit.v" type="file.verilog" enable="1"/>
+        <File path="src/bk/azsound.v" type="file.verilog" enable="1"/>
+        <File path="src/bk/ym2149.sv" type="file.verilog" enable="1"/>
+        <File path="src/bk/azctrl.v" type="file.verilog" enable="1"/>
+        <File path="src/bk/azmisc.v" type="file.verilog" enable="1"/>
+        <File path="src/bk/poke.v" type="file.verilog" enable="1"/>
+        <File path="src/hdmi/hdmi_packet.v" type="file.verilog" enable="1"/>
+        <File path="src/hdmi/hdmi_serdes.v" type="file.verilog" enable="1"/>
+        <File path="src/hdmi/hdmi_tx.v" type="file.verilog" enable="1"/>
+        <File path="src/hdmi/tmds_channel.v" type="file.verilog" enable="1"/>
+        <File path="src/mister/flashwr.v" type="file.verilog" enable="1"/>
+        <File path="src/mister/coreload.v" type="file.verilog" enable="1"/>
+        <File path="src/mister/hid.v" type="file.verilog" enable="1"/>
+        <File path="src/mister/mcu_spi.v" type="file.verilog" enable="1"/>
+        <File path="src/mister/osd_u8g2.v" type="file.verilog" enable="1"/>
+        <File path="src/mister/sd_card.v" type="file.verilog" enable="1"/>
+        <File path="src/mister/sd_rw.v" type="file.verilog" enable="1"/>
+        <File path="src/mister/sdcmd_ctrl.v" type="file.verilog" enable="1"/>
+        <File path="src/mister/sector_dpram.v" type="file.verilog" enable="1"/>
+        <File path="src/mister/sysctrl.v" type="file.verilog" enable="1"/>
+        <File path="src/bk.cst" type="file.cst" enable="1"/>
+        <File path="src/bk.sdc" type="file.sdc" enable="1"/>
+    </FileList>
+</Project>
