@@ -41,10 +41,11 @@ vector (4) through the program's `QUIET`.
 | `aytest.mac` | chip 1 then chip 2 through 177172/177174 (a word: register low, value high): A 440 Hz, B 554, C 659, the chord, noise on A, an envelope on A.  A is right, C left in the AZ's mix |
 | `ay714.mac` | the AY through 177714: form A the BK world's (a word = ~register, a byte = ~value, as AY_TEST on WRKANDOS2.IMG does), form B the register as a byte to 177715, form C form A with bit 14 set (GID's chip select) |
 | `covtest.mac` | a ~110 Hz sawtooth on 177200 (left), 177202 (right), 177204 (both), 177206 as a word (8-bit left) and as a byte (both), then 177714 with 177212 bits 1,0 clear (legacy mono) and bit 0 set (stereo, right inverted) |
+| `memtest.mac` | the free memory: pages 400-3777 (7 MB) each mapped into window 3, filled with a running-sum pattern seeded by the page and the pass (three instructions a word: about a minute a pass), read back on the next pass; a dot every 64 pages, the count of mismatches and the first one (page, offset, expected, read) a pass, a key ends it.  A count on a board is the memory - the simulation's model never fails |
 | `dmatest.mac` | the DMA: PCM 16-bit mono 430 Hz, IMA ADPCM mono 430 Hz, IMA stereo (left 430, right 646 Hz), each two seconds looping from pages 400/401/402 (loaded through window 3, which is put back), then PCM once with the DONE bit polled; 177170 and 177160 printed after each |
 
 ANDOS facts the tools rest on, measured on `WRKANDOS2.IMG` and
-`../../soft/azbk/DISKS/dave.img`: the disk is FAT12 (800 KB, 4 sectors a cluster, 112
+`soft/azbk/DISKS/dave.img`: the disk is FAT12 (800 KB, 4 sectors a cluster, 112
 root entries), a program is headerless, and its load address is the
 directory entry's time field - 1000 for DAVE, AY_TEST and every
 utility, 30000 for `DAVEDATA.*`, 177777 for `ANDOS.SYS`; typing the

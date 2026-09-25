@@ -69,7 +69,7 @@ design is the AZ's cold reset too, `top.v`, so the separate "Cold reset
 (AZ)" entry of 24 Sep morning is gone - it did the same thing; menu.c's
 own cold boot at start is 'R' = 3 then 0, which `sysctrl.v` also turns
 into the controller's cold pulse), Hardware (CPU 4/8 MHz 'T', Joystick
-'j', Volume 'A'), About, Debug, Save settings.  The letters are
+'j', Covox 177714 'c' - Off (default) or AZ setup, Volume 'A'), About, Debug, Save settings.  The letters are
 `sysctrl.v`'s; a menu value is three edits: the letter in the form
 string, `variables_bk[]`, and `sysctrl.v`.  `make menu-test` walks the
 forms on the host.
@@ -80,7 +80,7 @@ so the controller's unit n is that file.  At start `az_boot()` reads
 `AZ.INI` first and the saved images override its D0..D3.  "No Disk"
 unmounts.
 
-The Debug page (SYS CMD 7, `top.v`'s `dbg_bus`; four lines a screen,
+The Debug page (SYS CMD 7, `top.v`'s `dbg_bus`; removed from the OSD in 0.1.28, the window stays for the testbench; tone and noise letters for what the mixer enables, the volumes with `e` for the envelope, the noise period, the envelope shape; four lines a screen,
 scrolled): the memory's state and the SDRAM clock phase chosen, the
 phases the self-test passed at with each capture, the last bus cycle's
 address and the cycle and reset counts, the reset chain,

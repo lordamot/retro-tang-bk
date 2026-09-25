@@ -1,5 +1,84 @@
 # Changelog
 
+## 0.1.28 (25 September 2026)
+
+The buzz confirmed gone on the board ("works!").  The instruments that
+found it come out again: the OSD's Debug page (with the AY shadow, the
+level meters, the F12 snapshot and the 128-byte debug window - SYS
+command 7 is back to its 32 bytes, which the testbench still reads),
+and the serial I/O log (`iolog.v`, `tools/iolog.py`, `make log`) - the
+Tang's UART is the core loader's alone again.  What stays: the Covox
+177714 switch, the AY decode and filter, the sound tests, the F11 and
+hotkey fixes, the key map.
+
+## 0.1.27 (25 September 2026)
+
+Dangerous Dave's "bzzzt" is gone.  The legacy Covox and the AY share
+the БК's port 177714, and this design fed both whenever 177212 enabled
+the Covox - which AZBOOT does from the saved settings ("legacy Covox
+stereo").  An AY game's register writes, eleven select words and
+inverted data bytes a frame during a sound, then played through the
+Covox as a click train on the left channel.  Found by logging the
+board's writes over the new serial line and replaying them into the
+sound module: peaks of 16400 against a clean 1700.  The Hardware menu
+gains "Covox 177714": Off (the default) gives the port to the AY
+alone, as a real БК with an AY interface has it (MiSTer's BK0011M
+makes the two exclusive); "AZ setup" is the old behaviour, for a
+program that plays samples through the legacy Covox.  The AZ's own
+Covox at 177200-177206 is not affected.  FPGA and firmware.
+
+## 0.1.26 (25 September 2026)
+
+The I/O log: every write the machine makes to its I/O page, with a
+timestamp, streamed out of the Tang Nano's own USB serial at 2 Mbaud
+(`tang/src/bk/iolog.v`, pin 69 shared with tang-ultima's loader), and
+`tools/iolog.py` / `make log` on the laptop to decode it live - by
+default the two AYs, a line per change of a mixer, a volume or the
+noise period, with `NOISE ON x` for a channel playing with its noise
+enabled.  Tested end to end in simulation (`+UARTLOG=`: AZBOOT's
+writes decoded in order, none lost) and on the game's own AY writes.
+The FPGA only.
+
+## 0.1.25 (25 September 2026)
+
+Two more instruments on the Debug page, both from the F12 moment: a
+level meter per sound source (the AY sum, the Covox, the speaker, the
+DMA: peak to peak over the last 0.26 s), which says which device is
+making a noise; and each AY as it was the last time a channel had a
+fixed volume ("snd"), so the chip's state during a sound can be read
+after it. The debug window is 128 bytes. FPGA and firmware.
+
+## 0.1.24 (25 September 2026)
+
+The Debug page's AY lines come from the moment F12 opened the menu
+(the firmware reads the debug window on the menu's show event), then
+the live state under "now": opened seconds later, the page had only
+ever seen the silence after an effect.  The firmware only.
+
+## 0.1.23 (25 September 2026)
+
+The OSD's Debug page opens with both AYs as the machine left them:
+which tones and noises the mixer enables, the three volumes (`e` for
+the envelope), the noise period and the envelope shape, and further
+down all sixteen registers and the selected one - from a shadow in
+`azsound.v` written on the strobes that load the chips, through a
+debug window widened to 64 bytes (`sysctrl.v`, `top.v`).  An
+instrument for the buzz after Dave hits a ceiling, which MEMTEST
+(thirteen clean passes on the board) has taken off the memory.
+MEMTEST itself is fast now: a pass a minute, dots as it goes.
+
+## 0.1.22 (24 September 2026)
+
+The AY's "bzzzt": the chip's channel outputs were sampled raw at 44.1
+kHz, so a short-period tone - inaudible on the chip, and what a game
+leaves on a channel it is not using - aliased into a full-amplitude
+broadband hash under every sound (Dangerous Dave's landing on the
+board).  Each side's AY sum now goes through a 10 kHz low-pass at the
+clock rate and a box average over the sample period: a period-1 tone
+from 3115 to 75 peak to peak, a 3.3 kHz one untouched.  The FPGA;
+the firmware changes in its caption only.  The test disk gains
+MEMTEST, a soak of the free memory through window 3 (25 Sep).
+
 ## 0.1.21 (24 September 2026)
 
 The keyboard: in РУС the six symbol keys the БК keeps letters on give

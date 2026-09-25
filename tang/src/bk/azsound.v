@@ -18,7 +18,7 @@
 //   177714 (write) the BK's port: the AY the BK way (a word write selects
 //                  the register, a byte write loads it, both inverted; bit
 //                  14 of the word names chip 2), and the legacy 8-bit Covox
-//                  when bit 1 of 177212 allows
+//                  when bit 1 of 177212 allows and the OSD's 'c' is on
 //   177716 (write) bits 6, 5, 2 the speaker, three bits
 //
 // The AYs are MiSTer's ym2149.sv at 1.7 MHz (the BK's clock, an enable
@@ -30,8 +30,10 @@
 // standard one and the state persists across a cycle when bit 4 says so.
 //
 // The mix is signed 16 bits a side: right is AY channels A and B of
-// both chips, left C and B (MAXIOL's formula), plus the Covox, the
-// speaker and the DMA, each scaled so that no single source clips; the
+// both chips, left C and B (MAXIOL's formula), each side averaged over
+// the sample period so that the chip's ultrasonic tones do not alias,
+// plus the Covox, the speaker and the DMA, each scaled so that no single
+// source clips; the
 // Covox, the speaker and the AYs are unipolar and go through a DC
 // blocker, so a program's silence is silence and not an offset.
 //========================================================================
@@ -55,6 +57,7 @@ module azsound (
     input             sel1_wr,      // 177716
     input      [15:0] cpu_dout,
     input      [1:0]  cpu_wtbt,
+    input             covox_714,    // the OSD's 'c': the legacy Covox may take 177714 at all
 
     // the DMA's memory port
     output reg        d_req,
@@ -168,7 +171,15 @@ always @(posedge clk) begin
             if (ay_bk2) begin ay2_dat <= ~cpu_dout[7:0]; ay2_d_pend <= 1'b1; end
             else        begin ay1_dat <= ~cpu_dout[7:0]; ay1_d_pend <= 1'b1; end
         end
-        if (!cvx_csr[1]) begin
+        // The legacy Covox shares 177714 with the AY, and a real BK has one or
+        // the other on its port (MiSTer's BK0011M makes them exclusive).  Fed
+        // both, an AY game's register writes - the select words and the
+        // inverted data bytes, eleven a frame - drive the Covox too: the
+        // "bzzzt" under every sound in Dangerous Dave (25 Sep 2026, found by
+        // replaying the board's I/O log into this module: peaks of 16000
+        // against a clean 1400).  So the Covox takes the port only when the
+        // OSD says so ('c', "Covox 177714", off by default) AND 177212 does.
+        if (covox_714 && !cvx_csr[1]) begin
             if (cvx_csr[0]) begin cvx_l <= {cpu_dout[7:0], 8'd0}; cvx_r <= {cpu_dout[15:8], 8'd0}; end
             else begin cvx_l <= {cpu_dout[7:0], 8'd0}; cvx_r <= {cpu_dout[7:0], 8'd0}; cvx_m <= {cpu_dout[7:0], 8'd0}; end
         end
@@ -408,12 +419,39 @@ end
 // the AYs: right A+B, left C+B, of both chips; 8-bit channels
 wire [10:0] ay_r = {3'd0, a1_a} + {3'd0, a2_a} + {3'd0, a1_b} + {3'd0, a2_b};
 wire [10:0] ay_l = {3'd0, a1_c} + {3'd0, a2_c} + {3'd0, a1_b} + {3'd0, a2_b};
+// The YM's outputs step at up to its clock / 16 (106 kHz for a period of
+// 1) and the output is sampled at 44.1 kHz: taken raw, a short-period
+// tone - inaudible on the chip, and what BK software leaves on an unused
+// channel - aliased into a full-amplitude broadband hash (Dangerous Dave's
+// landing on the board, 24 Sep 2026: "bzzzt" under every sound from then
+// on; a period-1 tone measured 3100 peak to peak at the output, as much
+// as a real tone).  So each side's channel sum goes through a first-order
+// low-pass at the clock rate (a leaky integrator, 1/1024 a clock: 10 kHz)
+// and is then averaged over the sample period, 1470 clocks (a box with
+// its nulls at the multiples of 44.1 kHz): together about -30 dB on the
+// period-1 tone, -1 dB on a 5 kHz one.  A second box after the sampler
+// was tried and does nothing, the aliasing having already happened.
+// sum / 32 is the mean x 46, the x48 the mix gave the AYs before.
+reg [20:0] ay_lp_l = 21'd0, ay_lp_r = 21'd0;     // 11.10 fixed point: 1020 * 1024 < 2^21
+reg [21:0] ay_acc_l = 22'd0, ay_acc_r = 22'd0;   // 1470 * 1020 < 2^21
+reg [15:0] ay_avg_l = 16'd0, ay_avg_r = 16'd0;
+always @(posedge clk) begin
+    ay_lp_l <= ay_lp_l - {10'd0, ay_lp_l[20:10]} + {10'd0, ay_l};
+    ay_lp_r <= ay_lp_r - {10'd0, ay_lp_r[20:10]} + {10'd0, ay_r};
+    if (tick) begin
+        ay_avg_l <= ay_acc_l[20:5]; ay_avg_r <= ay_acc_r[20:5];
+        ay_acc_l <= {11'd0, ay_lp_l[20:10]};  ay_acc_r <= {11'd0, ay_lp_r[20:10]};
+    end else begin
+        ay_acc_l <= ay_acc_l + {11'd0, ay_lp_l[20:10]};
+        ay_acc_r <= ay_acc_r + {11'd0, ay_lp_r[20:10]};
+    end
+end
+
 // unipolar sources through a DC blocker: y = x - x1 + y1 * (1 - 1/1024).
-// The AYs go through it too (x48, so that after the >>2 below a channel
-// is x12 as before): the YM idles at 0, so centring their sum on a
-// constant (12240 until 24 Sep 2026) made silence a DC of -12240.
-wire signed [19:0] uni_l = {4'd0, cvx_l} + {4'd0, spk} + ({9'd0, ay_l} << 5) + ({9'd0, ay_l} << 4);
-wire signed [19:0] uni_r = {4'd0, cvx_r} + {4'd0, spk} + ({9'd0, ay_r} << 5) + ({9'd0, ay_r} << 4);
+// The AYs go through it too: the YM idles at 0, so centring their sum on
+// a constant (12240 until 24 Sep 2026) made silence a DC of -12240.
+wire signed [19:0] uni_l = {4'd0, cvx_l} + {4'd0, spk} + {4'd0, ay_avg_l};
+wire signed [19:0] uni_r = {4'd0, cvx_r} + {4'd0, spk} + {4'd0, ay_avg_r};
 reg signed [19:0] x1_l = 20'sd0, x1_r = 20'sd0, y_l = 20'sd0, y_r = 20'sd0;
 reg [9:0] dc_div = 10'd0;
 always @(posedge clk) begin

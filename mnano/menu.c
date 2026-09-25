@@ -81,7 +81,7 @@ menu_variable_t variables_agat9[] = {
 // The main form is four AZ units (the images the controller's AZ.INI
 // names, or the ones chosen here, which override them and are saved),
 // the reset, the AZ's cold reset, a "Hardware" form for the switches,
-// an "About" text, the "Debug" window and "Save settings".  Every
+// an "About" text and "Save settings".  Every
 // switch is a letter sysctrl.v decodes; the unit slots are sdc.c's
 // image names, mounted through azbk.c (az_set_unit) and never through
 // sd_card.v.
@@ -105,7 +105,6 @@ static const char main_form_bk[] =
   "B,Reset,R;"                          // the reset: every reset here is the AZ's cold one too
   "S,Hardware,1;"                       // Hardware submenu is form 1
   "T,About,;"                           // the about_bk text
-  "T,Debug,;"                           // the debug window (menu_debug_open)
   "B,Save settings,S;";
 
 static const char hardware_form_bk[] =
@@ -113,6 +112,7 @@ static const char hardware_form_bk[] =
   // --------
   "L,CPU:,4 MHz|8 MHz,T;"               // the К1801ВМ1's clock
   "L,Joystick:,Off|On,j;"               // on 177714
+  "L,Covox 177714:,Off|AZ setup,c;"     // the legacy Covox on the port the AY shares (azsound.v)
   "L,Volume:,Mute|33%|66%|100%,A;";
 
 static const char *forms_bk[] = {
@@ -143,6 +143,7 @@ menu_variable_t variables_bk[] = {
   { 'A', { 1 }},    // Volume 33%
   { 'T', { 0 }},    // CPU 4 MHz
   { 'j', { 1 }},    // joystick on
+  { 'c', { 0 }},    // the legacy Covox off: 177714 drives the AY only
   { '\0',{ 0 }}
 };
 // ------------------------------------------------------------------
@@ -1165,43 +1166,6 @@ static void menu_text_wrap(menu_t *menu, const char *para) {
   if(len) menu_text_add(menu, line);
 }
 
-// The "Debug" page: 32 bytes from the core's memcheck.v (sysctrl.v's
-// CMD 7), formatted here.  The byte map is memcheck.v's `dbg`.
-static void menu_text_open(menu_t *menu, const char *title, const char **paras);
-static void menu_debug_open(menu_t *menu, const char *title) {
-  // top.v's dbg bus through SYS command 7: what the machine is doing
-  static unsigned char d[32];
-  static char line[10][40];
-  static const char *paras[20];
-  int n = 0;
-  sys_get_debug(menu->osd->spi, d, 32);
-  snprintf(line[0], sizeof(line[0]), "init %d bist %d fail %d late %d phase %d",
-           (d[1]>>1)&1, d[2]&1, (d[2]>>1)&1, (d[2]>>2)&1, d[22]&15);
-  // the activity byte: init, bist ok, a bus cycle (50 ms), an I/O write, an SPI byte,
-  // a card read, not in reset, a ROM byte (top.v)
-  snprintf(line[1], sizeof(line[1]), "passes early %02X%02X late %02X%02X rd %02X act %02X",
-           d[21], d[20], d[25], d[24], d[26], d[27]);
-  snprintf(line[2], sizeof(line[2]), "cycle at %02X%02X, %u cycles, %u resets",
-           d[7], d[6], d[18] | d[19]<<8, d[17]);
-  snprintf(line[3], sizeof(line[3]), "reset %d init %d key %d",
-           (d[4]>>1)&1, d[4]&1, d[5]&1);
-  snprintf(line[4], sizeof(line[4]), "177346 %02X%02X 177340 %02X%02X",
-           d[15], d[14], d[11], d[10]);
-  snprintf(line[5], sizeof(line[5]), "177716 %02X%02X 177230 %02X%02X",
-           d[9], d[8], d[13], d[12]);
-  snprintf(line[6], sizeof(line[6]), "AZ: pending %d done %d err %d",
-           (d[3]>>2)&1, (d[3]>>1)&1, d[3]&1);
-  // the page table: physical pages given out since the last cold reset (sdram.v's alloc_next - 128, of 1920),
-  // and how many times the count wrapped (aliasing since the first)
-  snprintf(line[7], sizeof(line[7]), "pages %u of 1920, wraps %u",
-           ((d[28] | (d[29] & 7) << 8) - 128) & 0x7ff, d[29] >> 3);
-  snprintf(line[8], sizeof(line[8]), "units: %s %s", az_unit_path(0) ? az_unit_path(0) : "-", az_unit_path(1) ? az_unit_path(1) : "-");
-  for(int i=0;i<9;i++) paras[n++] = line[i];
-  for(int i=0;az_boot_line(i) && n < 19;i++) paras[n++] = az_boot_line(i);   // the ROM load, its read-back verify, the commands served
-  paras[n] = NULL;
-  menu_text_open(menu, title, paras);
-}
-
 static void menu_text_open(menu_t *menu, const char *title, const char **paras) {
   u8g2_SetFont(MENU2U8G2(menu), font_helvR08_te);
   text_nlines = 0;
@@ -1452,12 +1416,10 @@ static void menu_select(menu_t *menu) {
   case 'T':
     // a page of text
     if(core_id == CORE_ID_BK) {
-      // menu_get_str returns the REST of the form string ("Debug,;..."),
-      // so a label is a prefix compare up to its comma (PK8000 Nano's
-      // third flash opened About for Debug with strcmp)
+      // the one text page is About (menu_get_str returns the REST of the
+      // form string, so the label runs on past its comma)
       const char *label = menu_get_str(menu, s, MENU_ENTRY_INDEX_LABEL);
-      if(!strncmp(label, "Debug,", 6)) menu_debug_open(menu, label);
-      else                             menu_text_open(menu, label, about_bk);
+      menu_text_open(menu, label, about_bk);
     }
     break;
 

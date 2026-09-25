@@ -19,7 +19,7 @@
   sd_card.v's slots), Reset, the AZ's cold reset, Hardware: every value
   stepped with the cursor keys (and Space) both ways and back, ESC (the
   OSD closes and reopens on the same form), the title back to the main
-  form, About opened, scrolled and closed, Debug, Save settings.
+  form, About opened, scrolled and closed, Save settings.
 */
 #include <stdio.h>
 #include <stdlib.h>
@@ -264,17 +264,17 @@ int main(int argc, char **argv) {
   menu_do(menu, MENU_EVENT_SHOW);
   shot("main");
 
-  //---- the main form: four units, Reset, Hardware, About, Debug, Save settings
+  //---- the main form: four units, Reset, Hardware, About, Save settings
   CHECK(menu->form == 0 && menu->entry == 1, "start: form %d entry %d", menu->form, menu->entry);
   CHECK(strstr(menu->forms[0], "BK Nano,;") == menu->forms[0], "main form title: %s", menu->forms[0]);
   CHECK(strstr(menu->forms[0], "F,AZ0:,0|img+bkd+dsk;") && strstr(menu->forms[0], "F,AZ1:,1|img+bkd+dsk;") &&
         strstr(menu->forms[0], "F,AZ2:,2|img+bkd+dsk;") && strstr(menu->forms[0], "F,AZ3:,3|img+bkd+dsk;") &&
         strstr(menu->forms[0], "B,Reset,R;") && !strstr(menu->forms[0], "Cold reset") &&
         strstr(menu->forms[0], "S,Hardware,1;") &&
-        strstr(menu->forms[0], "T,About,;") && strstr(menu->forms[0], "T,Debug,;") &&
+        strstr(menu->forms[0], "T,About,;") && !strstr(menu->forms[0], "Debug") &&
         strstr(menu->forms[0], "B,Save settings,S;"),
         "main form entries: %s", menu->forms[0]);
-  CHECK(menu->entries == 10, "main form has %d entries, expected 10", menu->entries);
+  CHECK(menu->entries == 9, "main form has %d entries, expected 9", menu->entries);
   CHECK(strstr(menu->forms[1], "Hardware,0|7;") == menu->forms[1], "Hardware title: %s", menu->forms[1]);
   CHECK(strstr(menu->forms[1], "L,CPU:,4 MHz|8 MHz,T;") && strstr(menu->forms[1], "L,Joystick:,Off|On,j;") &&
         strstr(menu->forms[1], "L,Volume:,Mute|33%|66%|100%,A;"),
@@ -285,7 +285,7 @@ int main(int argc, char **argv) {
 
   //---- the defaults went to the core, every letter once and in order, then the reset
   {
-    static const char init_log[][2] = { {'A',1}, {'T',0}, {'j',1}, {'R',3}, {'R',0} };
+    static const char init_log[][2] = { {'A',1}, {'T',0}, {'j',1}, {'c',0}, {'R',3}, {'R',0} };
     int init_n = sizeof(init_log)/sizeof(init_log[0]);
     CHECK(set_n == init_n, "%d values sent at start, expected %d", set_n, init_n);
     for(int i=0;i<init_n && i<set_n;i++)
@@ -316,7 +316,7 @@ int main(int argc, char **argv) {
   CHECK(menu->entry == 6, "Hardware entry %d", menu->entry);
   menu_do(menu, MENU_EVENT_SELECT);
   CHECK(menu->form == 1 && menu->entry == 1 && menu->offset == 0, "Hardware: form %d entry %d", menu->form, menu->entry);
-  CHECK(menu->entries == 4, "Hardware has %d entries, expected 4", menu->entries);
+  CHECK(menu->entries == 5, "Hardware has %d entries, expected 5", menu->entries);
   shot("hardware");
 
   //---- CPU: 4/8 MHz
@@ -330,7 +330,12 @@ int main(int argc, char **argv) {
 
   //---- Volume: right, left, both wrap, Space steps on
   menu_do(menu, MENU_EVENT_DOWN);
-  CHECK(menu->entry == 3, "Volume entry %d", menu->entry);
+  CHECK(menu->entry == 3, "Covox entry %d", menu->entry);
+  n = set_n;
+  CHECK(stepped(menu, 'c', +1, 1) && set_n == n+1, "right on Covox 177714: c=%d", set_last('c'));
+  CHECK(stepped(menu, 'c', -1, 0), "left on Covox 177714: c=%d", set_last('c'));
+  menu_do(menu, MENU_EVENT_DOWN);
+  CHECK(menu->entry == 4, "Volume entry %d", menu->entry);
   CHECK_VISIBLE(menu);
   n = set_n;
   CHECK(stepped(menu, 'A', +1, 2) && set_n == n+1, "right on Volume: A=%d", set_last('A'));
@@ -353,18 +358,18 @@ int main(int argc, char **argv) {
   menu_do(menu, MENU_EVENT_DOWN);
   CHECK(menu->entry == 0 && menu->offset == 0, "DOWN past the last: entry %d offset %d, expected the title", menu->entry, menu->offset);
   menu_do(menu, MENU_EVENT_UP);
-  CHECK(menu->entry == 3, "UP from the title: entry %d, expected 3", menu->entry);
+  CHECK(menu->entry == 4, "UP from the title: entry %d, expected 4", menu->entry);
   CHECK_VISIBLE(menu);
   menu_do(menu, MENU_EVENT_PGUP);
   CHECK(menu->entry == 1 && menu->offset == 0, "PGUP to the top: entry %d offset %d", menu->entry, menu->offset);
   menu_do(menu, MENU_EVENT_PGDOWN);
-  CHECK(menu->entry == 3, "PGDOWN to the end: entry %d", menu->entry);
+  CHECK(menu->entry == 4, "PGDOWN to the end: entry %d", menu->entry);
 
   //---- ESC closes the OSD; F12 opens it again on the same form
   menu_do(menu, MENU_EVENT_HIDE);
   CHECK(!osd_visible, "ESC left the OSD visible");
   menu_do(menu, MENU_EVENT_SHOW);
-  CHECK(osd_visible && menu->form == 1 && menu->entry == 3, "after ESC and F12: form %d entry %d", menu->form, menu->entry);
+  CHECK(osd_visible && menu->form == 1 && menu->entry == 4, "after ESC and F12: form %d entry %d", menu->form, menu->entry);
 
   //---- the title returns to the entry that opened the form
   menu_do(menu, MENU_EVENT_DOWN);
@@ -403,28 +408,17 @@ int main(int argc, char **argv) {
   menu_do(menu, MENU_EVENT_SELECT);
   CHECK(menu->form == 0 && menu->entry == 7, "back from About: form %d entry %d", menu->form, menu->entry);
 
-  //---- Debug: a text page of the core's bytes (all zero here: sys_get_debug is stubbed)
-  menu_do(menu, MENU_EVENT_DOWN);
-  CHECK(menu->entry == 8, "Debug entry %d", menu->entry);
-  n = set_n;
-  menu_do(menu, MENU_EVENT_SELECT);
-  CHECK(menu->form == MENU_FORM_TEXT && menu->offset == 0 && set_n == n, "Debug: form %d offset %d", menu->form, menu->offset);
-  CHECK(menu_text_line(0) && !strncmp(menu_text_line(0), "init ", 5), "Debug shows '%s'", menu_text_line(0));
-  shot("debug");
-  menu_do(menu, MENU_EVENT_SELECT);
-  CHECK(menu->form == 0 && menu->entry == 8, "back from Debug: form %d entry %d", menu->form, menu->entry);
-
   //---- Save settings is a button on the main form: it writes the card (fails here, no card)
   menu_do(menu, MENU_EVENT_DOWN);
-  CHECK(menu->entry == 9 && menu->offset == 5, "Save settings entry %d offset %d", menu->entry, menu->offset);
+  CHECK(menu->entry == 8 && menu->offset == 4, "Save settings entry %d offset %d", menu->entry, menu->offset);
   n = set_n;
   menu_do(menu, MENU_EVENT_SELECT);
-  CHECK(menu->form == 0 && menu->entry == 9 && set_n == n && osd_visible, "Save settings left the main form or sent something");
+  CHECK(menu->form == 0 && menu->entry == 8 && set_n == n && osd_visible, "Save settings left the main form or sent something");
   shot("main-end");
   menu_do(menu, MENU_EVENT_DOWN);    // the main form's title is not selectable: straight to AZ0
   CHECK(menu->entry == 1 && menu->offset == 0, "DOWN past Save settings: entry %d offset %d, expected AZ0", menu->entry, menu->offset);
   menu_do(menu, MENU_EVENT_UP);
-  CHECK(menu->entry == 9 && menu->offset == 5, "UP from AZ0: entry %d offset %d, expected Save settings", menu->entry, menu->offset);
+  CHECK(menu->entry == 8 && menu->offset == 4, "UP from AZ0: entry %d offset %d, expected Save settings", menu->entry, menu->offset);
   menu_do(menu, MENU_EVENT_HIDE);
 
   printf("menu-test: %d screens in %s, %d error(s)\n", shots, outdir, errors);

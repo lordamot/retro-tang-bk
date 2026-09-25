@@ -40,6 +40,7 @@
 //   +KEYS2=<codes> +KEYS2_MS=<ms>, +KEYS3=/+KEYS3_MS=  more keys at their own times
 //   +RESETKEY_MS=<ms>  press and release the СБР key (F11) at that time
 //   +HOTKEY=<n> +HOTKEY_MS=<ms>  the controller's hotkey n (1: 512/256, 2: the palette reset)
+//   +SCRIPT=<file>  presses and releases from a file: `<ms> p|r <octal code>` a line, in time order
 //   +RAMDUMP      write the SDRAM's words to sim/out/ram.hex at the end
 //
 // Every delay in milliseconds is `ms * 64'd1000000`: a 32-bit product
@@ -608,6 +609,9 @@ module tb_top;
     // Run
     //--------------------------------------------------------------------
     integer run_ms, type_ms, type_delay, keys2_ms, keys3_ms, turbo_n, magic_ms, resetkey_ms, hotkey_n, hotkey_ms;
+    integer script_fd, script_ms, script_code, script_n;
+    reg [1023:0] script_name;
+    reg [8*8:1] script_act;
     reg [8*255:1] type_str, keys_str;
     integer tries, ki, kn;
     reg     fastboot;
@@ -769,6 +773,25 @@ module tb_top;
             end
         end
 
+        // +SCRIPT=<file>: key presses and releases at given times, one a line:
+        //   <ms> p <code>   press the КОИ-7 code (octal)     <ms> r <code>   release it
+        // in time order, from the start; a held key is a p and a later r
+        if ($value$plusargs("SCRIPT=%s", script_name)) begin
+            script_fd = $fopen(script_name, "r");
+            if (script_fd == 0) $display("[tb] cannot open %0s", script_name);
+            else begin
+                while (!$feof(script_fd)) begin
+                    script_n = $fscanf(script_fd, "%d %s %o\n", script_ms, script_act, script_code);
+                    if (script_n == 3) begin
+                        if (script_ms * 64'd1000000 > $time) #(script_ms * 64'd1000000 - $time);
+                        $display("[tb] %0t script: %0s %0o", $time, script_act, script_code);
+                        hid_key(script_code[7:0], (script_act[8:1] == "r") ? 8'h01 : 8'h00);
+                    end
+                end
+                $fclose(script_fd);
+            end
+        end
+
         // +RESETKEY_MS=<ms>: press and release the СБР key (F11: flag 3) at
         // that time - the machine must come back from the reset it causes
         if ($value$plusargs("RESETKEY_MS=%d", resetkey_ms)) begin
@@ -886,7 +909,10 @@ module tb_top;
             acked = 1'b1;
         end
         if (!uut.b_sync && sync_d) begin
-            if (!acked) begin
+            // the core answers 177700-177716 itself (cpu.v's psel): those cycles
+            // show no external ack and are not timeouts (until 25 Sep 2026 every
+            // poll of 177716 counted as one - 240 a frame in Dangerous Dave)
+            if (!acked && (cyc_adr[15:4] != (16'o177700 >> 4))) begin
                 timeouts = timeouts + 1;
                 if (timeouts <= 10) $display("[tb] %0t no acknowledge at %06o (%s)", $time, cyc_adr, uut.b_we ? "wr" : "rd");
             end

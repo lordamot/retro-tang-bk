@@ -123,8 +123,8 @@ Makefile, what lint and simulation cover, flashing, reading the board),
   nn*4096` and the logo to `0x20000` over SYS CMD 6 (three address
   bytes) between menu.c's `R=3` and `R=0`, so the machine is held in
   reset meanwhile, and reads them back over CMD 8 (all of AZBOOT, one
-  word in sixteen of the rest) - the counts are on the OSD's Debug
-  page.  The simulation preloads the SDRAM model from `soft/azbk/ROM/`
+  word in sixteen of the rest) - the counts go to the firmware's
+  serial log (the OSD's Debug page that also showed them went in 0.1.28).  The simulation preloads the SDRAM model from `soft/azbk/ROM/`
   (`+ROMDIR=`, `+NOROM`; `+ROMSPI` sends them over the link instead).
   No ROM set, no machine: a processor that runs with 177716's write
   side at 0000 (AZBOOT's second instruction writes 014000 there) and
@@ -136,15 +136,15 @@ Makefile, what lint and simulation cover, flashing, reading the board),
   table is cleared by the AZ's cold reset.  Before it the top bits
   wrapped, and Dangerous Dave's page set at 13 MB (pages 6500/6600)
   landed on its own backdrop (page 2600): a whole day of display
-  fixes chased that.  A game's pages are on the Debug page's write
-  log; a page above 0o3777 with the old wrap is the tell.
+  fixes chased that.  A page above 0o3777 with the old wrap was the
+  tell (the Debug page that showed a game's pages went in 0.1.28).
 - **A display line's fetch can straddle the line's end** when the
   processor keeps the memory busy, and the burst's late words must be
   dropped, not written at the next line's start (`azvideo.v`'s
   `drain`; the first board: a flickering band at the left, lines
   shifted by a burst).  The simulation's memory model is ideal and
-  never ran that late; the Debug page's "video" line counts short and
-  straddled lines on a board.
+  never ran that late; a board shows it as a band at the left edge
+  (the Debug page's counter of it went in 0.1.28).
 - **The unit select (001) is the FPGA's, not the MCU's.**  AZ337's
   boot code writes 001 and goes straight on to 002 and 005 without
   waiting for DONE; a command written while DONE is clear is dropped.
@@ -161,7 +161,7 @@ Makefile, what lint and simulation cover, flashing, reading the board),
   in front.  The first board's unit 0 was `/sd/bk/sd/dave.img`.
 - **The SDRAM clock phase is swept at power-up**, each of the sixteen
   with both captures, into two masks (`ok_early`, `ok_late`: the
-  strip's second and third rows, the Debug page's "passes" line); the
+  strip's second and third rows; SYS CMD 7's bytes 20-21 and 24-25); the
   middle of the longest run of either is the phase and capture.  The
   first board passed at 5-7 and 10-15 and chose 12 late.
 - **The firmware's core id is 10** (`CORE_ID_BK`), and every table the
@@ -196,6 +196,20 @@ Makefile, what lint and simulation cover, flashing, reading the board),
   on the splash). A run to its credits is 95 s of machine time, about
   3.5 hours; `+NODECODE` and a second run directory (`build.md`) make
   that bearable.
+- **177714 is one port with two devices on it: the AY and the legacy
+  Covox.**  Fed both, an AY game's register writes play through the
+  Covox as a buzz (Dave, 24-25 Sep: two days of wrong theories).  The
+  OSD's "Covox 177714" gates the Covox off by default.  What found it
+  was the board's I/O writes, logged over the Tang's UART and replayed
+  into `azsound.v` alone (0.1.26-0.1.27, removed again in 0.1.28; git
+  history has it) - worth rebuilding the next time a board symptom
+  resists photos.
+- **The AY's outputs must be filtered before they are sampled.**  The
+  YM steps at up to 106 kHz and the mix samples at 44.1 kHz; taken raw,
+  a period-1 tone - what a game leaves on an unused channel - is a
+  full-amplitude hash (Dave's landing, 24 Sep: "bzzzt" until reset).
+  `azsound.v` low-passes at the clock rate and box-averages over the
+  sample period; a filter after the sampler cannot help.
 - **A key that causes a reset must be handled during the reset.**
   `keyboard.v`'s СБР level is set by the press and cleared by the
   release; its event block once sat under `else` of the module's reset,

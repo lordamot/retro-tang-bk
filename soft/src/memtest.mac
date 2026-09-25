@@ -1,0 +1,164 @@
+	.TITLE	MEMTEST - the AZ's free memory through window 3, pass after pass
+;
+; Pages 400-3777 (7 MB of the free RAM, the range a game like Dave
+; lives in) are each mapped into window 3 (30000-37777), filled with
+; a running-sum pattern seeded by the page and the pass, and read back
+; on the next pass; every mismatch is counted and the first of a pass
+; is shown (page, offset, expected, read).  A pass is about a minute
+; (three instructions a word, 3.7 million words each way); a dot every
+; 64 pages shows it moving.  On a board a count that is not zero
+; is the memory, not the software: the simulation's model never fails.
+; Any key ends it after the current pass; the window is put back.
+;
+	.ASECT
+	. = 1000
+	.INCLUDE bk.mac
+
+WIN3	= 30000
+WBIT	= 10
+FIRST	= 400
+LAST	= 3777
+
+START:	MOV	#STOP,@#4
+	PRINT	#TITLE
+	MOV	@#WPAGE3,SPAGE
+	MOV	@#WACT,SACT
+	MOV	@#WRO,SRO
+	CLR	PASS
+	CLR	PKEY
+	BIC	#WBIT,@#WRO
+	BIS	#WBIT,@#WACT
+
+	PRINT	#SFILL
+	CALL	FILL			; pass 0: write only
+NEXT:	INC	PASS
+	CLR	ERRS
+	CLR	FIRSTP
+	PRINT	#SPASS
+	MOV	PASS,R1
+	CALL	OCTAL
+	PRINT	#SPC
+	CALL	CHECK			; read the last pass's pattern, write this pass's
+	PRINT	#SERR
+	MOV	ERRS,R1
+	CALL	OCTAL
+	TST	ERRS
+	BEQ	2$
+	PRINT	#SFIRST
+	MOV	FIRSTP,R1
+	CALL	OCTAL
+	PRINT	#SPC
+	MOV	FIRSTO,R1
+	CALL	OCTAL
+	PRINT	#SPC
+	MOV	FIRSTE,R1
+	CALL	OCTAL
+	PRINT	#SPC
+	MOV	FIRSTG,R1
+	CALL	OCTAL
+2$:	PRINT	#CRLF
+	TSTB	@#177660		; a key waiting ends it
+	BMI	3$
+	BR	NEXT
+3$:	CALL	QUIET
+	JMP	FINISH
+
+; The pattern of a page is a running sum: the first word is the page
+; number plus the pass's key, every next word the previous plus 47063
+; (odd, so every bit toggles often) - three instructions a word, the
+; most this processor does at 4 MHz without leaving a page untested.
+; R4 page, R5 the pass key -> R0 the first word; R3 the increment.
+; The key of a pass is the previous one plus 5555.
+
+; write every page with this pass's pattern; a dot every 64 pages
+FILL:	MOV	#FIRST,R4
+	MOV	#47063,R3
+1$:	MOV	R4,@#WPAGE3
+	MOV	R4,R0
+	ADD	PKEY,R0
+	MOV	#WIN3,R1
+	MOV	#2048.,R2
+2$:	MOV	R0,(R1)+
+	ADD	R3,R0
+	SOB	R2,2$
+	INC	R4
+	BIT	#77,R4
+	BNE	3$
+	CALL	DOT
+3$:	CMP	R4,#LAST
+	BLOS	1$
+	RETURN
+
+; read every page against the previous pass's pattern, write this one's;
+; a dot every 64 pages, a key ends the pass early
+CHECK:	MOV	PKEY,R5			; the previous key
+	ADD	#5555,PKEY		; this pass's
+	MOV	#FIRST,R4
+	MOV	#47063,R3
+1$:	MOV	R4,@#WPAGE3
+	MOV	R4,R0
+	ADD	R5,R0
+	MOV	#WIN3,R1
+	MOV	#2048.,R2
+2$:	CMP	R0,(R1)+
+	BNE	5$
+4$:	ADD	R3,R0
+	SOB	R2,2$
+	; now this pass's pattern into the page
+	MOV	R4,R0
+	ADD	PKEY,R0
+	MOV	#WIN3,R1
+	MOV	#2048.,R2
+6$:	MOV	R0,(R1)+
+	ADD	R3,R0
+	SOB	R2,6$
+	INC	R4
+	BIT	#77,R4
+	BNE	7$
+	CALL	DOT
+	TSTB	@#177660
+	BMI	8$
+7$:	CMP	R4,#LAST
+	BLOS	1$
+8$:	RETURN
+5$:	INC	ERRS
+	TST	FIRSTP
+	BNE	4$
+	MOV	R4,FIRSTP
+	MOV	R1,FIRSTO
+	SUB	#2,FIRSTO
+	MOV	R0,FIRSTE
+	MOV	-2(R1),FIRSTG
+	BR	4$
+
+DOT:	MOV	R0,-(SP)
+	MOV	#'.,R0
+	EMT	16
+	MOV	(SP)+,R0
+	RETURN
+
+QUIET:	BIC	#WBIT,@#WACT
+	MOV	SPAGE,@#WPAGE3
+	MOV	SACT,@#WACT
+	MOV	SRO,@#WRO
+	RETURN
+
+PASS:	.WORD	0
+PKEY:	.WORD	0
+ERRS:	.WORD	0
+FIRSTP:	.WORD	0
+FIRSTO:	.WORD	0
+FIRSTE:	.WORD	0
+FIRSTG:	.WORD	0
+SPAGE:	.WORD	0
+SACT:	.WORD	0
+SRO:	.WORD	0
+TITLE:	.ASCIZ	/MEMTEST - PAGES 400-3777 (7 MB) THROUGH WINDOW 3; A DOT IS 64 PAGES, ANY KEY ENDS/<12>
+SFILL:	.ASCIZ	/FILL /
+SPASS:	.ASCIZ	/PASS /
+SERR:	.ASCIZ	/ ERRORS /
+SFIRST:	.ASCIZ	/ FIRST PAGE,OFFSET,EXP,GOT /
+SPC:	.ASCIZ	/ /
+	.EVEN
+	RUNTIME
+	.END	START

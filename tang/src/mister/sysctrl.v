@@ -47,6 +47,7 @@ module sysctrl (
   output reg [1:0]  system_volume,    // 'A' mute(0), 33%(1), 66%(2), 100%(3)
   output reg        system_turbo,     // 'T' 0 4 MHz, 1 8 MHz
   output reg        system_joy,       // 'j' the joystick on 177714
+  output reg        system_covox,     // 'c' the legacy Covox on 177714 as 177212 says (1), or off (0)
   output reg        system_cold,      // 'B' one clock: a cold reset of the AZ controller
 
   // CMD 6: a byte into the SDRAM; CMD 8: a word out of it
@@ -115,6 +116,7 @@ always @(posedge clk) begin
       system_volume  <= 2'b01;
       system_turbo   <= 1'b0;
       system_joy     <= 1'b1;
+      system_covox   <= 1'b0;
       system_cold    <= 1'b0;
       poke_stb <= 1'b0;
       poke_adr <= 24'd0;
@@ -178,6 +180,7 @@ always @(posedge clk) begin
                     if(id == "A") system_volume  <= data_in[1:0];
                     if(id == "T") system_turbo   <= data_in[0];
                     if(id == "j") system_joy     <= data_in[0];
+                    if(id == "c") system_covox   <= data_in[0];
                     if(id == "B") system_cold    <= 1'b1;
                 end
             end

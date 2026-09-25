@@ -68,7 +68,7 @@ yours.
 
 `make az-test` (`mnano/az_test.c`) is the firmware's side of the boot
 on the host: FatFs on an in-memory FAT32 volume filled from
-`soft/azbk/` (and `../../soft/azbk/DISKS/dave.img` as `DISKS/DAVE.IMG`) the way the card
+`soft/azbk/` (with `soft/azbk/DISKS/dave.img` in it) the way the card
 is laid out, `az_boot()` run against it, the SYS command 6 stream
 checked against the ROM files in a model of the SDRAM, the units
 against `AZ.INI`.  `+ROMSPI` on the simulation is the FPGA's side of
@@ -130,7 +130,8 @@ bits), `AYTEST` (both AYs through 177172/177174), `AY714` (the AY the
 BK world's way, through 177714, in three write forms), `COVTEST` (the
 Covox registers and the legacy one on 177714), `DMATEST` (the sound
 DMA: PCM 16-bit, IMA ADPCM mono and stereo, looping and one-shot, from
-pages 400-402 loaded through window 3).  `tools.md` has the details.
+pages 400-402 loaded through window 3), and `MEMTEST` (the free memory
+soaked through window 3, pass after pass).  `tools.md` has the details.
 
 ```
 make soft          assemble them (tools/macro11, fetched by make toolchain)
@@ -183,6 +184,7 @@ LOAD HANDSHAKE FAIL` means the port opened and nothing answered: not in
 boot mode, or the wrong port.  Press RST afterwards.
 
 ## Reading the board
+
 
 The six LEDs, lit when the thing is true (`top.v`'s last lines; the
 board's LEDs are active low and the assignments invert):

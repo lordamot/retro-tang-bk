@@ -131,7 +131,7 @@ always @(posedge clk or negedge n_all_rst)
     count_rst <= !n_all_rst ? 24'd0 : count_rst + {23'd0, !count_rst[23]};
 
 wire [1:0] system_reset, system_volume;
-wire       system_turbo, system_joy, system_cold;
+wire       system_turbo, system_joy, system_cold, system_covox;
 wire       az_reset, key_reset;
 
 reg  [19:0] rst_hold = 20'd0;    // a pulse request held for 16 ms
@@ -313,6 +313,7 @@ azsound snd (
     .sync(b_sync), .adr(b_adr), .stb(b_stb), .we(b_we), .wtbt(b_wtbt), .din(b_dout),
     .dout(d_snd), .ack(a_snd), .wr_stb(b_wr_stb),
     .sel2_wr(sel2_wr), .sel1_wr(sel1_wr), .cpu_dout(b_dout), .cpu_wtbt(b_wtbt),
+    .covox_714(system_covox),
     .d_req(dm_req), .d_adr(dm_adr), .d_take(dm_take), .d_ack(dm_ack), .d_rdata(dm_rdata),
     .out_l(snd_l), .out_r(snd_r)
 );
@@ -433,7 +434,7 @@ sysctrl sctl1 (
     .int_ack(int_ack),
     .buttons(2'b00), .leds(), .color(),
     .system_reset(system_reset), .system_volume(system_volume), .system_turbo(system_turbo),
-    .system_joy(system_joy), .system_cold(system_cold),
+    .system_joy(system_joy), .system_cold(system_cold), .system_covox(system_covox),
     .poke_stb(poke_stb), .poke_adr(poke_adr), .poke_data(poke_data),
     .peek_stb(peek_stb), .peek_data(peek_data), .peek_ready(peek_ready),
     .dbg(dbg_bus),

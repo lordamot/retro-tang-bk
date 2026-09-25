@@ -53,8 +53,8 @@ Nothing has been on a board.  Everything below is "builds", "lints",
   frame (191 ticks).  The read-after-write check is clean over 2.8
   million SDRAM words.  71 controller commands in all.
 - **Dangerous Dave runs in simulation** (19 Sep, afternoon; the image
-  the operator put at `../../soft/azbk/DISKS/dave.img`, an ANDOS 3.1 disk: ANDOS.SYS,
-  DAVE, DAVEDATA.000-027). With `+D0=soft/dave.img`: ANDOS 3.1's
+  the operator put at `soft/azbk/DISKS/dave.img`, an ANDOS 3.1 disk: ANDOS.SYS,
+  DAVE, DAVEDATA.000-027). With `+D0=soft/azbk/DISKS/dave.img`: ANDOS 3.1's
   splash at 21.8 s waits for Space ("ПРОБЕЛ"), Space brings its
   two-panel shell with the `A>` line, `DAVE` and Enter at 26 s starts
   the loader - "AZBK DETECTED, GREAT!", "NVRAM READ OK", "TZ
@@ -89,7 +89,7 @@ make sim RUN_MS=4000 SIMARGS="+AZTRACE +VIDEO_PPM +PPM_FROM=3800" the BIOS scree
 make sim RUN_MS=8000 SIMARGS="+AZTRACE +VIDEO_PPM +PPM_FROM=7800" the NTP loop, 16 tries (before the DR fix)
 make sim RUN_MS=6000 SIMARGS="+AZTRACE +VIDEO_PPM +PPM_FROM=5800" the BIOS through the CMOS and card size
 make sim RUN_MS=14000 SIMARGS="+AZTRACE +VIDEO_PPM +PPM_FROM=13800" ANDOS's splash (about 28 minutes)
-build/sim/obj/tb_top +RUN_MS=95000 +NODECODE +D0=soft/dave.img +KEYS=20 +TYPE_MS=22500 \
+build/sim/obj/tb_top +RUN_MS=95000 +NODECODE +D0=soft/azbk/DISKS/dave.img +KEYS=20 +TYPE_MS=22500 \
     +TYPE_STR=dave +TYPE_DELAY=3500 +VIDEO_PPM +PPM_FROM=48000 +PPM_EVERY=300 +PPM_MAX=10
                                                                   Dave's title and credits (about 3.5 hours)
 ```
@@ -574,7 +574,7 @@ the noise only in-game) split the DMA from the AY path; the testbench
 now dumps its output as raw PCM (`+WAV=file +WAV_FROM=ms`, s16le
 stereo 44100) and a run to the title with the dump was started and
 stopped for the handover - `make sim RUN_MS=58000 SIMARGS="+NODECODE
-+D0=soft/dave.img +KEYS=20 +TYPE_MS=22500 +TYPE_STR=dave
++D0=soft/azbk/DISKS/dave.img +KEYS=20 +TYPE_MS=22500 +TYPE_STR=dave
 +TYPE_DELAY=3500 +WAV=sim/out/title.pcm +WAV_FROM=48000"` (two hours)
 gives the waveform to look at.  (2) The game's fire key: the menu is
 КТ = Esc; the port's default fire key is unknown.  (3) The Debug page
@@ -771,6 +771,131 @@ their letters (Ъ was untypable), the key map as `keyboard-ru.pdf` /
 About page current - flashed to the BL616 at 17:48, verified by SHA.
 The FPGA stays at 0.1.20 (17:26).
 
+## MEMTEST clean; the AYs on the Debug page (25 September 2026)
+
+The first MEMTEST was too slow to show anything (a dozen instructions
+a word: eight minutes before its first line; the key checked only
+between passes); rewritten to three instructions a word, a pass a
+minute, dots every 64 pages.  On the board: **thirteen passes, 0
+errors** over pages 400-3777 - the processor's path to the SDRAM is
+sound, and the memory reading of the night is off the table.
+
+The wall run's full memory dump (`run/davewall3`, 103 s): the in-game
+code names no DMA, Covox or AZ AY register (the four 177160 matches
+are PC-relative offsets); every game sound is the AY through 177714.
+And the state that can outlive a sound is there in the trace: when the
+level's jingle ends the engine leaves the mixer at 0 (tone and noise
+enabled on all three channels, noise period 0) and relies on the
+volumes for silence; an effect that raises a volume without rewriting
+the mixer plays with the highest-pitched noise in it - a hump at 5-7.5
+kHz after the 0.1.22 filter, which is what `current02.mp4` shows.
+Whether that is the engine's own behaviour (then the emulator and a
+real BK do it too) or something here leaves the mixer or a volume in
+a state the game does not intend, needs the registers on the board.
+So 0.1.23 puts them on the Debug page: a shadow of both chips'
+sixteen registers in `azsound.v`, a 64-byte debug window, the page
+opening with the mixer and volumes decoded.  Unit-tested against
+BK-protocol writes to both chips; `make menu-test` clean; `make
+bitstream` passes the gate (logic 60% (12419/20736), registers 37%,
+BSRAM 32/46).  The testbench still cannot move Dave in the level
+(`+SCRIPT` presses reach the keyboard; the game does not walk), so
+the bump is the board's to reproduce.  The firmware 0.1.23 was flashed
+at 10:26 (SHA verified), the bitstream written to the SPI flash at
+10:28.  Its timeout counter no longer
+counts the core's own registers (defect 8, closed).
+
+The board with 0.1.23 (10:40): the AY lines read "all zeroes always".
+Not the path: the testbench now reads all 64 bytes over the real SPI
+protocol and gets both mixers as FF after the boot's reset, as the
+shadow holds them.  The page was sampling at the wrong moment - it reads
+the window when Debug opens, seconds after F12, by which time the
+effect is over and the engine has faded its volumes.  0.1.24 (the
+firmware only) reads the window on the menu's show event, the instant
+F12 is pressed, and the page shows that snapshot ("F12 AY1 t ABC n
+ABC", "v 0 e 0 np 0 env 0") before the live state ("now").  AY2's
+mixer should read "t --- n ---" (FF, never written by the game); zeros
+there too would mean the bytes are not arriving after all.
+
+The board with 0.1.24 (10:50): at F12 and now alike, AY1 "t ABC n ABC
+v 0 e e np 0 env 0", AY2 "t --- n ---" - the bytes arrive (AY2's FF is
+the reset value), and AY1 is the engine's resting state: the mixer at
+0 (tone and noise enabled everywhere), B and C in envelope mode with
+the envelope held at 0, silent.  So the AY holds nothing wrong at rest
+and the buzz, if it is the AY, lives only while a sound plays - too
+short to catch with a keypress.  The legacy Covox, which this design
+feeds from every 177714 write while 177212 bit 1 is clear, was checked
+too: rebuilt from the traced refresh writes it makes frame-rate clicks
+with half its energy above 10 kHz, not the video's 5-7.5 kHz hump.
+0.1.25 adds level meters per source (AY, Covox, speaker, DMA; F12's
+0.26 s) and each AY's last sounding state to the Debug page, through
+a 128-byte window.  Unit-tested: a tone at volume 12 leaves "snd" with
+its registers after the chip goes silent; the Covox meter reads FF
+under AY writes with 177212 = 0, the legacy path working as decoded.
+`make bitstream` passes the gate (logic 63% (13054/20736), registers
+40%, BSRAM 32/46).
+
+The board with 0.1.25 (11:03, `prompts/snd0-3.jpg`): the last sound
+AY1 made ("snd") was channel B at a fixed volume of 12 with the mixer
+at 0 - tone and noise both enabled on B, the noise at its fastest: an
+AY tone gated by noise, the buzz, and the chip playing exactly what it
+was told.  The meters read 0 (F12 came after the sound).  The clean
+jingle in simulation plays B at volume 12 with B's noise disabled
+(mixer 10); so after the bump the mixer the game writes with a sound
+has B's noise on.  Photos being "really hard and annoying" (the
+operator), 0.1.26 streams the machine's I/O writes to the laptop over
+the Tang's own USB serial (`iolog.v`, `tools/iolog.py`, `make log`;
+`build.md`).  Tested in simulation end to end (673 records of
+AZBOOT's start, none lost, decoded in order) and the AY view on the
+wall run's traced writes (the jingle's notes `v 0 12 0 n A-C`, its
+end `n ABC v 0 e 0`).  Bitstream through the gate.
+
+## The buzz found (25 September 2026, late morning)
+
+The first board session through the serial log (`build/log/
+20260925-112517.bin`, 28 s, 194130 writes, none dropped; the operator
+jumping Dave at the house in the last seconds, buzzing): the game
+drives nothing but the AY on 177714 (no Covox register, no DMA, no
+speaker bit - every 177716 write is the map word 024020), and the AY's
+settled states are all clean - the jump is channel B at 11-12 with
+its pitch stepping up and B's noise off.  The OSD's "snd" photo had
+caught a 30 us transient: the refresh writes the mixer before the
+volumes.  So the 4862 sound writes were replayed, at their logged
+clocks, into `azsound.v` alone (`tb_replay` in the scratchpad): its
+output carried spikes of 13000-16700 on sounds whose clean peak is
+1100 - the design's own doing.  With 177212 = 2 (legacy Covox off) the
+same stretch peaks at 1441; with the saved setting (1, legacy Covox
+stereo) the left channel peaks at 16436 and the right is clean.  The
+legacy Covox was playing the AY protocol: the select words' low byte
+and the inverted data bytes, eleven a frame during a sound.  AZBOOT
+sets 177212 from the saved settings (its only writer, at page 100
+offset 5102); the game never touches it; the buzz was there from the
+start, on the left, loud when the refresh writes change.
+
+Fixed in 0.1.27: the OSD's Hardware form gains "Covox 177714" ('c'):
+Off (default) - 177714 drives the AY alone; "AZ setup" - the old
+behaviour.  Replayed: switch off, L peak 1740, R 1143, 0.5% above 5
+kHz on both; switch on, L 16436 again.  `make menu-test` clean,
+`make bitstream` through the gate (logic 65% (13322/20736), registers
+41%, BSRAM 34/46).  What the AY lessons of the two days leave in the
+design (the 177714 decode fix, the low-pass before the sampler, the
+AY on the Debug page, the serial log) all stays; the 0.1.22 filter was
+a real fix to a real alias, only not this buzz.
+
+## The board says it works; the instruments out (25 September 2026)
+
+0.1.27 flashed at 13:21/13:25: "works!" - the jump, the landing and
+the bump sound clean.  At the operator's word the OSD's Debug page and
+the serial I/O log come out again (0.1.28): the Debug entry, its F12
+snapshot, the AY shadow, the level meters, the 64/128-byte window
+(SYS CMD 7 back to 32 bytes, read by the testbench's end-of-run
+line), `iolog.v`, `tools/iolog.py`, `make log`, the testbench's
+`+UARTLOG=`.  The Tang's UART is the core loader's alone again (the
+operator has other plans for it).  A short boot in simulation after
+the removal: configuration, SDRAM, HDMI and I2S checks as before.
+Flashed: the firmware 0.1.28 at 13:31 (SHA verified), the bitstream
+(logic 58%, through the gate) to the SPI flash at 13:33.
+
+## What the first boot found (all fixed, all in CLAUDE.md's traps)
 
 1. The VM1's `casex` microcode matrices match nothing in Verilator -
    the processor aborted every microcycle.  Mask-and-value compares.
@@ -792,6 +917,111 @@ The FPGA stays at 0.1.20 (17:26).
    ADPCM decoder at 17.8 ns (72 setup violations).  A flag register, the
    read-or-write port pattern, a three-stage pipeline.
 
+## The landing's buzz (24 September 2026, night)
+
+The operator, with 0.1.20 on the board: a keypress in Dangerous Dave
+clicks as it should, but when Dave lands "there is parasite bzzzt
+sound, which actually now accompanies all game sounds" until a reset -
+"something accumulated and overloaded".  `prompts/current.mp4`'s
+sound track: broadband bursts, no period, 5000-6400 peak against a
+1500-peak game tone, one at every sound event after the first landing.
+
+The game's in-game sound is the AY the BK world's way (found through
+the memory dump of a simulation run - the overlays on the disk are
+compressed, so static reading of the files shows only the intro's
+DMA): the frame interrupt maps page 703 in at 100000 and calls the
+music engine, whose refresh writes registers 0-10 every frame with a
+word select and a byte load through R0 = 177714 (`100702`), exactly
+the protocol of the afternoon's fix; the simulation plays its tones
+cleanly (786, 530, 518 Hz at 71-73 s).  Registers 11-13 stay what the
+silence routine (`13302`) left: zero.
+
+The mechanism is not state but aliasing: the YM's channel outputs step
+at up to 106 kHz (a period of 1) and the mix sampled them raw at 44.1
+kHz, so a short-period tone - inaudible on the chip, and what BK
+software leaves on a channel it is not using - comes out as a
+full-amplitude broadband hash.  A unit test of `azsound.v` (a
+period-1 tone on channel A at volume 15): 3115 peak to peak at the
+output, as much as a 440 Hz one (3092).  AY_TEST's run of the
+afternoon had shown the same thing as a 20 kHz component under its
+sweep, taken then for the program's doing.  Fixed: each side's channel
+sum goes through a first-order low-pass at the clock rate (a leaky
+integrator of 1/1024 a clock, 10 kHz) and is then averaged over the
+sample period (1470 clocks, a box with nulls at the multiples of 44.1
+kHz).  Measured: period 1 -> 75, period 2 -> 153, period 4 (13 kHz) ->
+635, period 16 (3.3 kHz) 3098 -> 2814, period 242 (440 Hz) 3092 ->
+2956.  A second box after the sampler was tried first and did nothing:
+the aliasing had already happened.  Built as 0.1.22: `make bitstream`
+passes the gate (0 setup, 0 hold; logic 57% (11715/20736), registers
+35%, BSRAM 32/46) -> `bin/tang.fs` 21:59; `bin/bl616.bin` 0.1.22 is the
+caption only.  The firmware was flashed at 23:01 (SHA verified), the
+bitstream written to the SPI flash at 23:04.
+
+**The board with 0.1.22 (23:10): "that does not work"** -
+`prompts/current02.mp4`.  And the operator's clarification: the sound
+is right at first; the parasite starts when Dave jumps against the
+house wall to the upper limit ("when dave cant jump higher") and from
+then on rides under every sound; rare wrong frames flash too.  So it is
+state after all, set by that one event, and the aliasing fix was
+right but beside the point.  What the two videos' sound tracks say
+(band energies of a burst): 0.1.20 - 0.1-2.5k 7%, 2.5-5k 19%, 5-7.5k
+39%, 7.5-10k 8%, 10-15k 6%, 15-22k 21%; 0.1.22 - 22/20/44/11/2/2%.
+Not white noise: a hump at 5-7.5 kHz with the strongest line at
+6.9-7.5 kHz in both, and 0.1.22's filter only took the part above 10
+kHz.  A tone of period 14-16 on some channel, or the envelope cycling
+at 3.3 kHz (its second harmonic) - not the noise generator.
+
+The engine, from the dump: the image it refreshes every frame had
+(idle, 80 s) mixer 0 (noise enabled on A, B, C), noise period 0, vol A
+0, vol B 0xD0 (envelope mode), vol C 0, B's period 206; the envelope
+registers 11-13 are never written by the refresh (registers 0-10 only)
+and stay 0 from the silence routine, so B in envelope mode is B held
+silent - the model holds shape 0 at 0 as the chip does.  Three effect
+slots at 100466/100470/100472 with a priority rule (`100076`); the key
+list at 14360: Up (032) is the jump, Space (040) the fire, the letters
+E S A D.  The testbench got `+SCRIPT=<file>` (presses and releases at
+times, so a key can be held) and a run walks Dave to the house wall
+and jumps there twenty times with every sound-register write traced,
+the sound dumped and the memory dumped: `run/davewall`, launched
+23:21, due about 03:50.  Whether the buzz appears in simulation
+decides whether it is the design's or the board's.
+
+(The operator reorganised `soft/` at 19:55: the game image is
+`soft/azbk/DISKS/dave.img` now, the media files are gone, the package's
+DISKS/ is trimmed and carries `SNDTEST.IMG`.  Every run launched after
+that with the old `+D0=soft/dave.img` booted into BASIC for want of a
+disk - the game run of 20:46 and the first two wall runs - and their
+trace filters had also dropped 177714.  The wall run that counts is
+`run/davewall3`, launched 03:22 on the new path with the full filter,
+due about 07:30.  `make card` no longer stages the image separately,
+`make soft-image` keeps the package's `SNDTEST.IMG` current.)
+
+What `run/davewall3` showed (25 Sep, 07:00, at 86 s of its 103): the
+level's jingle from 81.2 to 83.2 s exactly as the engine writes it -
+B's period changing note by note (fd, 87, 67, c9, af, ce), its volume
+0x0c during a note and 0 between, the mixer 0x10/0x12 (B's tone gated
+off between notes) - and after it the engine leaves the mixer at 0
+(noise enabled on all three), the noise period 0, B in envelope mode
+(0xd0), the envelope at shape 0 held at 0: silence, as in the
+simulation's dump of the night.  The jumps and the held Right did
+nothing - Dave stands where the level put him at 86 s - so the
+testbench's keys are not driving the game the way the board's keyboard
+does (the splash's Space and the typed name do work; the game reads
+177716 bit 6 for a held key and 177662 through its own vector-60
+handler), and the run does not reproduce the bump.  During the whole
+window nothing wrote a sound register but the jingle: no DMA, no
+speaker, no Covox.  So the buzz the board makes on a landing has no
+register write behind it in this design, appears at one game event
+and comes with rare wrong frames: that is the game's state or its
+register image being corrupted on the board - memory, not sound.
+`MEMTEST` is on the test disk for exactly that: pages 400-3777 through
+window 3, a pattern a pass, the mismatch count and the first one on
+screen.  A count above zero on the board names the SDRAM path (the
+capture phase, the late-burst drain) rather than any sound module.
+The other reading, a real second-chip write through bit 14 of a
+177714 word, is ruled out by the trace: every select the game writes
+is 0003xx.
+
 ## Defects and open questions
 
 1. **The BIOS reports the processor as "6MHz"** (its timer loop
@@ -811,7 +1041,7 @@ The FPGA stays at 0.1.20 (17:26).
    DMA's PCM and IMA mono, the AYs through 177172/177174, the speaker
    and the Covox have been seen in simulation since; the sound tests
    of 24 Sep.)
-4. Dangerous Dave's image (`../../soft/azbk/DISKS/dave.img`, from hof.maxiol.com after
+4. Dangerous Dave's image (`soft/azbk/DISKS/dave.img`, from hof.maxiol.com after
    registration) is not the package's: it is the operator's copy,
    kept for the simulation.
 5. The screenshot command (044) answers ERR; the BK-0010 mode is
@@ -820,11 +1050,12 @@ The FPGA stays at 0.1.20 (17:26).
    frame.  Whether a sink takes the mode is a board question.
 7. Three layers, the processor and the blitter all busy could exceed
    a line's memory bandwidth (`video.md`); not seen, not proven either.
-8. Reads of 177716 time out in simulation during AZBOOT's second pass
-   (ten lines at 247-249 ms of the 300 ms run; 2472 timeouts in the
-   14 s run of 19 Sep) and the boot goes on regardless.  Which window
-   or mode makes SEL1 unanswered there is not established; the trace
-   (`+CPUTRACE` around 247 ms) is the way in.
+8. ~~Reads of 177716 time out in simulation~~ - they never did: the
+   core answers 177700-177716 itself (`cpu.v`'s `psel`) and the
+   testbench's timeout counter only saw the external ack, so every poll
+   of 177716 counted (1.47 million in a 103 s game run, 240 a frame;
+   the game's vector 4 points at data and is never taken).  The
+   counter excludes the core's own registers since 25 Sep 2026.
 9. The critical path (slack 0.067 ns at 64.8 MHz) runs from the VM1's
    data output through `azmap.v`'s ROM decode into `azctrl.v` and
    `azblit.v`: the bus's write data fanned into every peripheral's
@@ -848,19 +1079,12 @@ The FPGA stays at 0.1.20 (17:26).
 ## Next
 
 - The game's fire key (the menu is КТ = Esc; the port's default fire
-  key is unknown).
+  key is unknown), and the rare wrong frames the operator saw during
+  the buzz hunt - not yet looked at.
 - The chip select through 177714 bit 14 against GID's source; the DC
-  blocker's dead zone (a fractional accumulator).
-- The level run again with the page table, for the record (frames of
-  the first level in `sim/frames/`).
-- The processor's bus rate (defect 1: no wait states), the blitter's
-  speed against MAXIOL's benchmark (ours is faster; fine).
-- `../tang-ultima`: add the core.
-- Dave past the credits: Space at 100 s, a few Right presses, frames
-  of the first level (the blitter, the AY, the joystick path); then a
-  block write (the game's config, `dave.cfg`).
-- The bus timing (item 1): decide on wait states.
-- Flash a board (`build.md`): the memory self-test LEDs, the OSD, the
-  BIOS screen, ANDOS, then Dave.
+  blocker's dead zone (a fractional accumulator); `AZ.INI` names disks
+  the trimmed package no longer carries.
+- The processor's bus rate (defect 1: no wait states).
 - `../tang-ultima`: add the core (`mcu.md`'s last section says what).
-- `prompts/0 initial.txt` is this session's transcript.
+- The testbench's scripted keys reach the keyboard but do not move
+  Dave in the level - the way into simulating the game's input.

@@ -5,7 +5,7 @@
   /bk/AZ.INI off the card through FatFs and sends every ROM over SYS
   command 6.  Nothing in the FPGA simulation runs that code, so this
   does: FatFs is built with an in-memory disk, a FAT32 volume is made on
-  it and filled from soft/azbk/ (and soft/dave.img as DISKS/DAVE.IMG)
+  it and filled from soft/azbk/ (its DISKS/dave.img also as DAVE.IMG there and at the root)
   exactly as the card is laid out, then az_boot() runs against it with
   sys_poke24() writing into a model of the SDRAM.  The checks: every ROM
   file's bytes are at 0x40000 + slot * 4096, the logo at 0x20000, the
@@ -186,8 +186,8 @@ int main(void) {
   put_dir("soft/azbk", "/sd/bk");
   put_dir("soft/azbk/ROM", "/sd/bk/ROM");
   put_dir("soft/azbk/DISKS", "/sd/bk/DISKS");
-  put_file("soft/dave.img", "/sd/bk/DISKS/DAVE.IMG");
-  put_file("soft/dave.img", "/sd/DAVE.IMG");          // ...and at the card's root, where the OSD may pick it
+  put_file("soft/azbk/DISKS/dave.img", "/sd/bk/DISKS/DAVE.IMG");
+  put_file("soft/azbk/DISKS/dave.img", "/sd/DAVE.IMG");          // ...and at the card's root, where the OSD may pick it
 
   // what the firmware does at start
   spi_t spi;

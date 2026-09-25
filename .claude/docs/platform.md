@@ -173,7 +173,7 @@ legacy Covox off, 2 speaker off, 3 AY8910 instead of YM2149.  177714
 written: the AY access of the BK world - a word write selects the
 register, a byte write loads it, both inverted, both from the low byte
 (MiSTer's `BK0011M.sv`: `BC = bus_wtbt[1]`, `DI = ~bus_din[7:0]`; the
-package's AY_TEST does exactly that) - and the legacy 8-bit Covox.
+package's AY_TEST does exactly that) - and the legacy 8-bit Covox, but only when the OSD's "Covox 177714" is set to "AZ setup" as well as 177212 allowing it: fed both, an AY game's register writes play through the Covox as a click train (the "bzzzt" of 25 Sep 2026); a real БК has one device on its port, and MiSTer's BK0011M makes them exclusive.
 GID's `~word & 0140000` picks the chip; here bit 14 of the written
 word set means chip 2, clear chip 1, a reading to check against GID's
 source (until 24 Sep 2026 a high-byte write was taken as the select

@@ -183,3 +183,174 @@ flash companion
 ****
 
 Flashed and verified: bin/bl616.bin 0.1.21 (the РУС letters on the symbol keys, the About page) onto the BL616 at 17:48, SHA matched. Press RST on the Dock. The FPGA stays at 0.1.20; nothing in 0.1.21 touches it.
+
+check ./prompt/current.mp4 - click there is keyboard button but when dave lands there is parasite bzzzt sound, which actually now accompanies all gam sounds. problem that land sound should be there and it was, but normal one. but this one is kinda "something accumulated and overloaded till reset from now on" - try find source of this problem and fix it
+
+****
+
+Found and fixed, as 0.1.22 (the FPGA). The video's sound track: broadband bursts, no period, four times louder than the game's tones, one at every sound event after the landing. The game's in-game sound turned out to be the AY the BK way - the music engine lives in a page the frame interrupt maps in at 100000 (the disk's overlays are compressed, so only a memory dump from a simulation run showed it) and refreshes registers 0-10 every frame with a word select and a byte load, the protocol of this afternoon's fix; the simulation plays its tones cleanly. What is not state at all is aliasing: the YM's channel outputs step at up to 106 kHz and the mix sampled them raw at 44.1 kHz, so a short-period tone - inaudible on the chip, and what a game leaves on a channel it is not using - came out as a full-amplitude hash; a period-1 tone measured 3115 peak to peak at the output, as loud as a 440 Hz one. Each side's AY sum now goes through a 10 kHz low-pass at the clock rate and a box average over the sample period: period 1 -> 75, period 2 -> 153, a 3.3 kHz tone unchanged. Lint clean; the bitstream is building; nothing flashed yet.
+
+flash companion
+
+****
+
+Flashed and verified: bin/bl616.bin 0.1.22 (the caption only) onto the BL616 at 23:01, SHA matched. Press RST on the Dock. The bitstream with the aliasing fix is not on the board yet: unplug the Dock's cable, plug the Tang Nano alone, and say "flash tang onto flash"; then Dave's landing is the test.
+
+flash tang onto flash
+
+****
+
+Written: bin/tang.fs 0.1.22 (21:59; the AY low-pass and box average, on top of 0.1.20's F11 fix and hotkeys) is in the Tang Nano's SPI flash, Done at 100%. Power-cycle. Then Dave: a jump and a landing, and whether the landing sound is a sound and nothing stays under the music afterwards; the intro's music and SNDTEST's AYTEST should sound as before, only cleaner.
+
+that does not work. check ./prompts/current02.mp4 for parasite sound even when jump
+let me clarify one more thing: sound is not broken at the beginning - it works ok. but from some point - it contains this parasite noise
+I usually walk to the house and jump by house wall to upper limit - and when dave cant jump higher - this "effect" becomes
+I also see some strange (wrong) frame flashing rarely at the screen - might be related
+as you now have disasm of dave - it might speed up your tests and diagnose maybe?
+
+****
+
+Understood - then it is state set by that one event, and the aliasing fix was right but beside the point. The two videos' sound tracks agree: the burst is not white noise but a hump at 5-7.5 kHz with its strongest line near 7 kHz, in 0.1.20 and 0.1.22 alike (the filter only removed what lay above 10 kHz) - a tone of period 14-16 on some channel, or the envelope cycling at 3.3 kHz. The disassembly gave the rest of the map: the engine refreshes registers 0-10 every frame from an image, never 11-13; three effect slots with a priority rule; the key list - Up is the jump, Space the fire. The testbench can now hold keys from a script, and a run walks Dave to the house wall and jumps there twenty times with every sound-register write traced, the sound and the memory dumped (launched 23:21, due about 03:50). If the buzz appears in simulation I can watch the registers and the envelope as it happens; if it does not, it is the board's and the trace still says what the bump writes. The rare wrong frame is noted as open; nothing in the videos I have shows one.
+
+(the morning after, 25 Sep 07:05: the overnight runs after 20:46 had booted into BASIC - soft/ had been reorganised at 19:55 and the game image is soft/azbk/DISKS/dave.img now - and their trace filters had dropped 177714; the wall run relaunched at 03:22 on the new path with the full trace. What it showed: the level's jingle through the AY exactly as the engine writes it, and after it the engine leaves the mixer at 0, B in envelope mode held at 0 - silence. The scripted Right and Up did not move Dave, so the bump was not reproduced, and in the whole window nothing wrote a sound register but the jingle: no DMA, no speaker, no Covox. A buzz that appears on the board without a register write, starts at one game event and comes with rare wrong frames is memory, not sound: the game's state or its register image corrupted on the board. MEMTEST is on SNDTEST.IMG for that - pages 400-3777 through window 3, a pattern a pass, the mismatch count and the first one on screen; a count above zero names the SDRAM path. The Makefile, the host test and the docs follow the move of the image; AZ.INI still names disks the package no longer carries.)
+
+flash companion
+
+****
+
+Flashed and verified at 07:53: the same bin/bl616.bin 0.1.22 that went on at 23:01 - the firmware has not changed since (the SHA is the same, 8725...b264). Press RST on the Dock. Nothing new for the board is in the tree: 0.1.22 is on both chips, and the next measurement is MEMTEST from SNDTEST.IMG on the card (the image in soft/azbk/DISKS/ and build/card/ is current).
+
+memtest on board does not show anything except its start screen with "press any key to exit". keys beep but nothing happens - is it correct?
+
+****
+
+Correct as written and useless as a tool: the first pass filled 7 MB and read it back word by word through a pattern routine of a dozen instructions, which on this processor is about eight minutes before the first line, and the key was looked at only between passes. Rewritten: a running-sum pattern in three instructions a word (a pass is about a minute), a dot every 64 pages so it is seen moving, the key checked every 64 pages. Copy SNDTEST.IMG onto the card again (soft/azbk/DISKS/ and build/card/bk/DISKS/ are current, 08:04) and run memtest: "FILL" with dots, then "PASS 1 ... ERRORS n" a minute later, and on.
+
+its currently PASS 13 and 0 errors in each
+
+****
+
+(continued after the model switch) Thirteen clean passes take the memory off the table. The wall run's full dump then settled where the game's sound goes: nothing in the in-game code touches the DMA, the Covox or the AZ's own AY ports - every sound is the AY through 177714. And the trace shows the state that can outlive a sound: when the level jingle ends, the engine leaves the mixer at 0, which enables noise on all three channels, and relies on the volumes for silence; an effect that raises a volume without rewriting the mixer plays its tone with the highest noise mixed in - after 0.1.22's filter a hump at 5-7.5 kHz, which is exactly current02.mp4. Whether that is the game itself or something here, the chip's registers on the board will say. So 0.1.23 puts them on the OSD's Debug page, at the top: which tones and noises the mixer enables (letters A B C), the volumes (e for the envelope), the noise period, the envelope shape, and further down all sixteen registers per chip. Unit-tested, menu test clean, the bitstream meets timing. Next on the board: flash both, play until the buzz, press F12 and open Debug, and photograph the first screen - and the same once before the bump for comparison.
+
+flash companion
+
+****
+
+Flashed and verified: bin/bl616.bin 0.1.23 (the AY lines on the Debug page) onto the BL616 at 10:26, SHA matched. Press RST on the Dock. The Debug page only fills in once the bitstream is 0.1.23 too: unplug the Dock, plug the Tang Nano alone, and "flash tang onto flash".
+
+flash tang onto flash
+
+****
+
+Written: bin/tang.fs 0.1.23 (08:44; the AY shadow and the 64-byte debug window) is in the Tang Nano's SPI flash, Done. Power-cycle. Then F12 > Debug before the house, and again once it buzzes.
+
+all zeroes always. fix companion firmware so it will read AY info at exact F12 keypress when this debug page active maybe?
+
+****
+
+Done as 0.1.24, the firmware only. The FPGA side was right: the testbench now reads all 64 bytes over the real SPI protocol and gets both mixers as FF after reset, as the shadow holds them. The zeros were timing - the page read the chips when Debug opened, seconds after F12, when the effect had already faded to silence. Now the firmware reads the window the instant F12 opens the menu, and the page shows that snapshot first (F12 AY1 ..., F12 AY2 ...) and the live state after it (now AY1 ...). Press F12 while the buzz is sounding, then open Debug. One check in the photo: AY2 should read t --- n --- (the game never writes it); zeros there too would mean the bytes are not arriving.
+
+flash companion
+
+****
+
+Flashed and verified: bin/bl616.bin 0.1.24 (the F12 snapshot on the Debug page) onto the BL616, SHA matched. Press RST on the Dock.
+
+same picture for both F12 and now
+AY1 t ABC n ABC v 0 e e np 0 env 0
+AY2 r --- n --- v 0 0 0 np 0 env 0
+
+****
+
+The bytes arrive (AY2 reads its reset value FF), and AY1 is the engine's resting state: mixer 0, B and C in envelope mode with the envelope at 0 - silent. So the chip holds nothing wrong at rest; if the buzz is the AY it exists only while a sound plays, too short to catch with a keypress. The legacy Covox (fed from every 177714 write while 177212 bit 1 is clear) was checked against the trace: frame-rate clicks mostly above 10 kHz, not the video's 5-7.5 kHz hump. 0.1.25 adds two instruments to the Debug page, both from the F12 moment: a level meter per source (the "F12 ay cv sp dm" line: peak to peak over the last quarter second of the AY sum, the Covox, the speaker, the DMA) - which device makes the noise - and each AY's last sounding state ("snd" lines: the registers the last time a channel had a fixed volume). Unit-tested; bitstream meets timing at 63%. Flash both; press F12 right after a buzzing sound, open Debug, photograph the first two screens.
+
+flash companion
+
+****
+
+Flashed and verified: bin/bl616.bin 0.1.25 onto the BL616, SHA matched. Press RST on the Dock; the bitstream 0.1.25 is next.
+
+flash tang onto flash
+
+****
+
+Written: bin/tang.fs 0.1.25 (10:53; the level meters and the last-sound copy) is in the SPI flash, Done. Power-cycle; then F12 right after a buzzing sound, Debug, the first two screens.
+
+ check ./prompts/snd0.jpg .. snd3.jpg for that
+btw cant we use that tang is always connected to laptop to automatically grab this data and something else?
+
+****
+
+The photos catch it: the last sound AY1 made was channel B at a fixed volume of 12 with the mixer at 0 - tone and noise both enabled on B, the noise at its fastest. That is the buzz: a tone gated by noise, the chip playing what it was told. The clean jingle in simulation plays B at 12 with B's noise off (mixer 10); so after the bump the mixer written with a sound has B's noise on. And yes: the FPGA has a serial line into the Tang's USB chip (pin 69, 2 Mbaud, /dev/ttyUSB1), used only by tang-ultima's loader; it can stream every I/O write with a timestamp and a laptop script can decode it live.
+
+lets make debug through tang serial, photos debug is really hard and annoying for that
+
+****
+
+Done as 0.1.26 (the FPGA; the firmware only changes its caption). tang/src/bk/iolog.v streams every write to 177000-177777 - address, byte lanes, data, a microsecond timestamp, a checksum, eight bytes a write - out of the Tang's USB serial at 2 Mbaud, sharing the pin with the core loader. tools/iolog.py decodes it on the laptop; by default it follows both AYs and prints a line whenever a mixer, a volume or the noise period changes, marking NOISE ON x for a channel playing with its noise enabled; --raw shows every write. make log runs it on /dev/ttyUSB1 and saves each session to build/log/ for replay. Tested in simulation end to end - AZBOOT's first writes and its 64 beeps decoded in order, none lost - and the AY view on the game's own writes from the wall run: the jingle's clean notes read v 0 12 0 n A-C, its end n ABC v 0 e 0. The bitstream meets timing at 66% logic. To use it: flash both, leave the Tang plugged in, run make log, play to the house and bump; the line with NOISE ON B, and the lines just before it, say what changed.
+
+how to stop the log?
+
+****
+
+Ctrl-C in the terminal running make log (it prints a summary; the session is already in build/log/). From elsewhere: pkill -f tools/iolog.py. Replay: python3 tools/iolog.py --file build/log/<session>.bin (--raw for every write).
+
+flash companion
+
+****
+
+Flashed and verified: bin/bl616.bin 0.1.26 onto the BL616, SHA matched. Press RST on the Dock; the bitstream 0.1.26 (the log) is next.
+
+flash tang onto flash
+
+****
+
+Written: bin/tang.fs 0.1.26 (11:14; the I/O log) is in the SPI flash, Done. Power-cycle, then make log.
+
+ done
+
+****
+
+(read build/log/20260925-112517.bin: 28 s, 194130 writes, none dropped; no NOISE ON line - the AY's settled states are clean; the photo's snd state was a 30 us transient between the mixer and volume writes of a refresh.)
+
+last 4-6 seconds for sure - I was jumping dave which gives long buzz serie (till it goes up, and then when landing)
+
+****
+
+The AY history there is clean: the jump is B at 11-12 with its pitch stepping up, B's noise off. (asked whether the sound comes over HDMI or the I2S DAC)
+
+through hdmi
+
+****
+
+Found and fixed, as 0.1.27. The session's 4862 sound writes, replayed at their logged clocks into azsound.v alone, came out with spikes of 13000-16700 on sounds that peak at 1100 clean - the design's own doing. The source is the legacy Covox: the port 177714 has two devices on it, the AY and the Covox, and this design fed both whenever 177212 enabled the Covox, which AZBOOT does from the saved settings (legacy Covox stereo). The game's AY register writes - select words and inverted data bytes, eleven a frame during a sound - then played through the Covox as a click train on the left channel. With the Covox off the same stretch peaks at 1441, clean. The Hardware menu gains "Covox 177714": Off by default (the port drives the AY alone, as a real BK with an AY interface has it; MiSTer's core makes them exclusive), "AZ setup" for the old behaviour. Replayed with the fix: 1740/1143 peaks, clean on both sides. Menu test clean, bitstream meets timing at 65%. Flash both and jump.
+
+flash companion
+
+****
+
+Flashed and verified: bin/bl616.bin 0.1.27 (the Covox 177714 switch) onto the BL616, SHA matched. Press RST on the Dock; the bitstream 0.1.27 is next.
+
+flash tang onto flash
+
+****
+
+Written: bin/tang.fs 0.1.27 (11:40; the Covox 177714 gate) is in the SPI flash, Done. Power-cycle and jump Dave at the house.
+
+works! lets remove debug from OSD, remove debug stream and make log (I now have other plans for it) and finalize then after flashing
+
+****
+
+Removed, as 0.1.28: the OSD's Debug page (its F12 snapshot, the AY shadow, the level meters, the wide debug window - SYS command 7 is back to its 32 bytes, which the testbench still reads) and the serial log (iolog.v, tools/iolog.py, make log, the testbench's receiver); pin 69 is the core loader's alone again. Kept: the Covox 177714 switch, the AY fixes, the sound tests, the F11 and hotkey fixes, the key map. Menu test clean (the main form has nine entries now), a short simulated boot clean on every check, the bitstream meets timing at 58% logic. Docs and changelog updated. Flash both; then I finalise.
+
+flash companion
+
+****
+
+Flashed and verified: bin/bl616.bin 0.1.28 (no Debug page) onto the BL616, SHA matched. Press RST on the Dock; the bitstream 0.1.28 is next.
+
+flash tang onto flash
+
+****
+
+Written: bin/tang.fs 0.1.28 (13:29; no debug instruments, the UART the loader's alone) is in the SPI flash, Done. Power-cycle.

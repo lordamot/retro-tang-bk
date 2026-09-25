@@ -39,7 +39,7 @@ Mansion** (порт grf для БК0011М+AZBK, 2025).  Сделано по об
   контроллер без кабеля.
 - Клавиатура USB как коды КОИ-7 с РУС/ЛАТ и СТР, джойстик USB на 177714.
 - Меню по **F12**: четыре устройства AZ0-AZ3, сброс (он же холодный сброс AZ),
-  «Hardware» (частота, джойстик, громкость), «About», «Debug»,
+  «Hardware» (частота, джойстик, старый Covox на 177714, громкость), «About»,
   сохранение настроек.
 
 Чего нет: сети (намеренно), снимка экрана (команда 044 отвечает
@@ -186,7 +186,7 @@ in `VERSION`, the history in `CHANGELOG.md`, the licence is MIT
 - A USB keyboard as КОИ-7 codes with РУС/ЛАТ and СТР, a USB joystick on
   177714.
 - A menu on **F12**: four units AZ0-AZ3, Reset (the AZ's cold reset too),
-  "Hardware" (CPU speed, joystick, volume), About, Debug, settings saved
+  "Hardware" (CPU speed, joystick, the legacy Covox on 177714, volume), About, settings saved
   to the card.
 
 Not there: the network (on purpose), the screenshot command (044 answers

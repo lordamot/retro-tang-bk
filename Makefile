@@ -207,7 +207,7 @@ menu-test: $(MENU_TEST_SRC) mnano/menu.h VERSION
 # build/SNDTEST.IMG, for the card or for +D0= in the simulation.
 #-----------------------------------------------------------------------
 MACRO11  := $(TOOLS)/macro11/macro11
-SOFTSRC  := spktest aytest ay714 covtest dmatest
+SOFTSRC  := spktest aytest ay714 covtest dmatest memtest
 SOFTBINS := $(foreach s,$(SOFTSRC),$(BUILD)/soft/$(s).bin)
 SOFTIMG  := $(BUILD)/SNDTEST.IMG
 
@@ -240,6 +240,7 @@ keyboard-%.pdf: tools/keyboard_pdf.py prompts/bk-keyboard.png
 $(SOFTIMG): $(SOFTBINS) tools/andosput.py soft/azbk/DISKS/WRKANDOS2.IMG
 	$(PYTHON) tools/andosput.py $@ --base soft/azbk/DISKS/WRKANDOS2.IMG \
 	  $(foreach s,$(SOFTSRC),$(shell echo $(s) | tr a-z A-Z)=$(BUILD)/soft/$(s).bin)
+	@cp $@ soft/azbk/DISKS/SNDTEST.IMG    # the package carries it, so it is kept current
 	@echo "$@: type SPKTEST, AYTEST, AY714, COVTEST or DMATEST at the A> line"
 
 #-----------------------------------------------------------------------
@@ -249,15 +250,12 @@ $(SOFTIMG): $(SOFTBINS) tools/andosput.py soft/azbk/DISKS/WRKANDOS2.IMG
 card:
 	@mkdir -p $(BUILD)/card/bk
 	@cp -r soft/azbk/. $(BUILD)/card/bk/
-	@test -f soft/dave.img && cp soft/dave.img $(BUILD)/card/bk/DISKS/DAVE.IMG || true
-	@test -f $(SOFTIMG) && cp $(SOFTIMG) $(BUILD)/card/bk/DISKS/SNDTEST.IMG || true
 	@echo
 	@echo "copy build/card/bk onto the SD card (FAT32) as /bk:"
 	@echo "  /bk/AZ.INI          the controller's configuration: ROMs, disks, boot unit"
 	@echo "  /bk/ROM/*.ROM       the ROM set (AZBOOT, AZLIB*, AZ337, SETUP, the BK's own)"
-	@echo "  /bk/DISKS/*.IMG     the disk images AZ.INI names (soft/dave.img is staged as DAVE.IMG:"
-	@echo "                      pick it as AZ0 in the OSD, or make it D0 in AZ.INI, to boot it;"
-	@echo "                      SNDTEST.IMG, if make soft-image ran, is the sound tests)"
+	@echo "  /bk/DISKS/*.IMG     the disk images AZ.INI names; dave.img (the operator's copy) and"
+	@echo "                      SNDTEST.IMG (the sound tests) are picked as AZ0 in the OSD"
 	@echo "  /bk/eeprom.dat      the controller's settings (SETUP writes it)"
 	@echo "and the OSD's Save settings writes /bk/bk.ini."
 	@echo "Under ../tang-ultima the same folder is used, as /bk/."
