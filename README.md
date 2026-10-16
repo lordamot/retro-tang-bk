@@ -275,3 +275,7 @@ Sorgelig (its wrapper and the MiSTer BK0011M core), MikeJ and Sorgelig
 (the YM2149), Till Harbaum (MiSTeryNano, whose firmware and MCU link all
 of this runs on), Alexey Gurov (UKNC Nano's hardware).  Authors of this
 repository: Sergei Lemeshev and Claude Code.
+
+SD card layout shared with Tang Ultima: `/bk/` holds this core's
+files and `/bk/bk.ini` settings. The firmware creates the folder
+at startup. File browsing defaults there; saved image paths take precedence.

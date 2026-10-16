@@ -487,6 +487,9 @@ static int menu_settings_load(menu_t *menu) {
 
   sdc_lock();  // get exclusive access to the file system
 
+  // Share the per-core card layout with Tang Ultima.
+  if(core_id == CORE_ID_BK) f_mkdir(CARD_MOUNTPOINT "/bk");
+
   FIL fil;
   const char *fname = settings_file_name();
   if(!fname) { sdc_unlock(); return 0; }
