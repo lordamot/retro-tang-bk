@@ -62,13 +62,10 @@ WAVE_MS  ?= 2
 
 COMX     ?= /dev/ttyACM0
 BAUDRATE ?= 2000000
+COMPANION_ROOT ?= $(abspath $(ROOT)/../tang-ultima)
 FW_BIN   ?= bin/bl616.bin
 
-# The BL616 firmware: -DM0S_DOCK=1 picks the SPI pinout in mnano/spi.c
-# that matches this board's wiring; CONFIG_BT_STACK_CLI=0 drops a BLE
-# shell that will not build against this SDK.
-FW_BOARD := bl616dk -DCMAKE_C_FLAGS=-DM0S_DOCK=1 -DCONFIG_BT_STACK_CLI=0
-FW_OUT   := mnano/build/build_out/misterynano_fw_bl616.bin
+# One companion implementation and JSON configuration in tang-ultima.
 
 .PHONY: all toolchain lint sim wave frames fw clean bitstream card soft soft-image keyboard \
         flash-fpga flash-fpga-flash flash-mcu help menu-test az-test timing palette
@@ -155,20 +152,11 @@ timing:
 # MCU firmware
 #-----------------------------------------------------------------------
 fw:
-	@test -d $(TOOLS)/bouffalo_sdk || { \
-	  echo "bouffalo_sdk missing - run: make toolchain" >&2; exit 1; }
-	@test -x $(TOOLS)/toolchain_gcc_t-head_linux/bin/riscv64-unknown-elf-gcc || { \
-	  echo "riscv toolchain missing - run: make toolchain" >&2; exit 1; }
-	$(MAKE) -C mnano \
-	  CROSS_COMPILE=$(TOOLS)/toolchain_gcc_t-head_linux/bin/riscv64-unknown-elf- \
-	  BL_SDK_BASE=$(TOOLS)/bouffalo_sdk \
-	  BOARD='$(FW_BOARD)' \
-	  PATH="$(TOOLS)/cmake/bin:$(TOOLS)/bin:$$PATH"
-	@mkdir -p $(BUILD)/fw bin
-	@cp $(FW_OUT) $(BUILD)/fw/bl616.bin
-	@echo
-	@echo "firmware: build/fw/bl616.bin"
-	@ls -l $(BUILD)/fw/bl616.bin
+	@test -f "$(COMPANION_ROOT)/mnano/companion.c" || { echo "shared firmware missing: clone tang-ultima beside this repository, or set COMPANION_ROOT" >&2; exit 1; }
+	$(MAKE) -C "$(COMPANION_ROOT)" fw
+	@mkdir -p $(BUILD)/fw
+	cp "$(COMPANION_ROOT)/build/fw/bl616.bin" $(BUILD)/fw/bl616.bin
+	@echo "shared companion: build/fw/bl616.bin (JSON profiles select the machine)"
 
 # The OSD menu on the host (mnano/menu_test.c): menu.c with its SDL host
 # switch, u8g2 drawing into a bitmap, FatFs with no card.  Walks every
@@ -190,14 +178,9 @@ az-test: $(AZ_TEST_SRC) mnano/azbk.h
 	@$(CC) $(HOST_OPT) -w -DSDL -Imnano -I$(FATFS_SRC) -o $(BUILD)/menu/az_test $(AZ_TEST_SRC)
 	$(BUILD)/menu/az_test
 
-menu-test: $(MENU_TEST_SRC) mnano/menu.h VERSION
-	@test -d $(FATFS_SRC) || { echo "bouffalo_sdk missing - run: make toolchain" >&2; exit 1; }
-	@mkdir -p $(BUILD)/menu
-	rm -f $(BUILD)/menu/*.txt $(BUILD)/menu/*.png
-	@$(CC) $(HOST_OPT) -w -DSDL -DCORE_VERSION='"$(shell head -1 VERSION)"' \
-	  -Imnano -Imnano/u8g2/csrc -I$(FATFS_SRC) -o $(BUILD)/menu/menu_test $(MENU_TEST_SRC)
-	$(BUILD)/menu/menu_test $(BUILD)/menu
-	$(PYTHON) $(TOOLS)/osd_png.py $(BUILD)/menu/*.txt
+menu-test config-check storage-test:
+	$(MAKE) -C "$(COMPANION_ROOT)" $@
+
 
 #-----------------------------------------------------------------------
 # The sound tests: soft/src/*.mac, one program a device, assembled with
@@ -247,18 +230,12 @@ $(SOFTIMG): $(SOFTBINS) tools/andosput.py soft/azbk/DISKS/WRKANDOS2.IMG
 # The card: soft/azbk/ is the AZBK's card as the emulator ships it, and
 # it goes under /bk/ on the SD card whole.
 #-----------------------------------------------------------------------
-card:
-	@mkdir -p $(BUILD)/card/bk
-	@cp -r soft/azbk/. $(BUILD)/card/bk/
-	@echo
-	@echo "copy build/card/bk onto the SD card (FAT32) as /bk:"
-	@echo "  /bk/AZ.INI          the controller's configuration: ROMs, disks, boot unit"
-	@echo "  /bk/ROM/*.ROM       the ROM set (AZBOOT, AZLIB*, AZ337, SETUP, the BK's own)"
-	@echo "  /bk/DISKS/*.IMG     the disk images AZ.INI names; dave.img (the operator's copy) and"
-	@echo "                      SNDTEST.IMG (the sound tests) are picked as AZ0 in the OSD"
-	@echo "  /bk/eeprom.dat      the controller's settings (SETUP writes it)"
-	@echo "and the OSD's Save settings writes /bk/bk.ini."
-	@echo "Under ../tang-ultima the same folder is used, as /bk/."
+.PHONY: card card-config menu-test config-check storage-test
+card: config-check
+	$(PYTHON) "$(COMPANION_ROOT)/tools/stage_card.py" --output "$(BUILD)/card"
+card-config: config-check
+	$(PYTHON) "$(COMPANION_ROOT)/tools/stage_card.py" --config-only --output "$(BUILD)/card"
+
 
 #-----------------------------------------------------------------------
 # Flashing
@@ -276,6 +253,8 @@ flash-mcu:
 	  echo "bouffalo_sdk missing - run: make toolchain" >&2; exit 1; }
 	@test -f $(FW_BIN) || { \
 	  echo "no firmware at $(FW_BIN)" >&2; exit 1; }
+	@test ! $(BUILD)/fw/bl616.bin -nt $(FW_BIN) || { echo "build/fw/bl616.bin is newer; pass FW_BIN=build/fw/bl616.bin or update bin/bl616.bin" >&2; exit 1; }
+	@test ! "$(COMPANION_ROOT)/build/fw/bl616.bin" -nt $(FW_BIN) || { echo "the shared firmware build is newer; run make fw and pass FW_BIN=build/fw/bl616.bin" >&2; exit 1; }
 	@test -w $(COMX) || { \
 	  echo "cannot write $(COMX) - is the board in boot mode, and are" >&2; \
 	  echo "you in the 'dialout' group?  See .claude/docs/build.md." >&2; \
